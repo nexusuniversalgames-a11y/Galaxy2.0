@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nébula — praça pra andar e conversar</title>
+<title>Nébula — mundo 3D pra andar e conversar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -28,107 +28,72 @@
     overflow:hidden;
   }
   .pixel{ font-family:'Press Start 2P', monospace; }
-
   #stars{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+  #app{ position:relative; z-index:1; height:100%; width:100%; display:flex; align-items:center; justify-content:center; }
 
-  #app{
-    position:relative; z-index:1; height:100%; width:100%;
-    display:flex; align-items:center; justify-content:center;
-  }
-
-  /* ---------- LOGIN ---------- */
-  .screen{
-    width:100%; height:100%;
-    display:flex; align-items:center; justify-content:center;
-    animation: fadeIn .5s ease;
-  }
+  /* ---------- LOGIN / LOBBY (unchanged UI chrome) ---------- */
+  .screen{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; animation: fadeIn .5s ease; }
   @keyframes fadeIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
-
   .card{
     background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2));
-    border:2px solid var(--line);
-    border-radius:14px;
-    padding:32px 34px;
-    width:min(440px, 92vw);
-    box-shadow: 0 0 0 1px rgba(139,92,246,.08), 0 30px 60px -20px rgba(0,0,0,.6);
+    border:2px solid var(--line); border-radius:14px; padding:32px 34px;
+    width:min(440px, 92vw); box-shadow: 0 0 0 1px rgba(139,92,246,.08), 0 30px 60px -20px rgba(0,0,0,.6);
   }
   .brand{ display:flex; align-items:center; gap:10px; margin-bottom:20px; }
-  .brand .dot{
-    width:10px; height:10px; border-radius:2px; background:var(--gold);
-    box-shadow:0 0 12px var(--gold); animation: pulse 2s infinite ease-in-out;
-  }
+  .brand .dot{ width:10px; height:10px; border-radius:2px; background:var(--gold); box-shadow:0 0 12px var(--gold); animation: pulse 2s infinite ease-in-out; }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.4;} }
   .brand h1{ font-size:13px; letter-spacing:1px; margin:0; color:var(--gold); }
-  label{
-    display:block; font-size:11px; color:var(--text-dim); margin:16px 0 8px; letter-spacing:.5px; text-transform:uppercase;
-  }
+  label{ display:block; font-size:11px; color:var(--text-dim); margin:16px 0 8px; letter-spacing:.5px; text-transform:uppercase; }
   input[type=text]{
-    width:100%; padding:12px 14px; border-radius:8px;
-    background:var(--bg-deep); border:2px solid var(--line);
-    color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:15px;
-    outline:none; transition:border-color .15s;
+    width:100%; padding:12px 14px; border-radius:8px; background:var(--bg-deep); border:2px solid var(--line);
+    color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:15px; outline:none; transition:border-color .15s;
   }
   input[type=text]:focus{ border-color:var(--nebula-soft); }
-
-  .avatar-picker{
-    display:flex; align-items:center; justify-content:center; gap:14px; margin-top:6px;
-  }
+  .avatar-picker{ display:flex; align-items:center; justify-content:center; gap:14px; margin-top:6px; }
   .arrow-btn{
-    width:38px; height:38px; border-radius:50%; border:2px solid var(--line);
-    background:var(--bg-deep); color:var(--text); font-size:16px; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; transition:border-color .15s, transform .1s;
-    flex:none;
+    width:38px; height:38px; border-radius:50%; border:2px solid var(--line); background:var(--bg-deep); color:var(--text);
+    font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:border-color .15s, transform .1s; flex:none;
   }
   .arrow-btn:hover{ border-color:var(--nebula-soft); color:var(--nebula-soft); }
   .arrow-btn:active{ transform:scale(.92); }
   .avatar-stage{
     width:150px; height:170px; border-radius:12px;
     background:radial-gradient(circle at 50% 30%, rgba(139,92,246,.18), transparent 70%), var(--bg-deep);
-    border:2px solid var(--line);
-    display:flex; align-items:center; justify-content:center;
+    border:2px solid var(--line); overflow:hidden;
   }
-  .avatar-name{
-    text-align:center; margin-top:10px; font-size:12.5px; font-weight:700; color:var(--gold); letter-spacing:.4px;
-  }
+  #avatarPreview{ width:100%; height:100%; display:block; }
+  .avatar-name{ text-align:center; margin-top:10px; font-size:12.5px; font-weight:700; color:var(--gold); letter-spacing:.4px; }
   .avatar-dots{ display:flex; justify-content:center; gap:5px; margin-top:8px; }
   .avatar-dots span{ width:5px; height:5px; border-radius:50%; background:var(--line); }
   .avatar-dots span.on{ background:var(--nebula-soft); }
-
   .btn{
-    margin-top:24px; width:100%; padding:13px; border-radius:9px; border:none;
-    background:var(--nebula); color:#fff; font-weight:700; font-size:14px;
-    cursor:pointer; letter-spacing:.3px; transition:background .15s, transform .1s;
+    margin-top:24px; width:100%; padding:13px; border-radius:9px; border:none; background:var(--nebula); color:#fff;
+    font-weight:700; font-size:14px; cursor:pointer; letter-spacing:.3px; transition:background .15s, transform .1s;
   }
   .btn:hover{ background:var(--nebula-soft); }
   .btn:active{ transform:scale(.98); }
   .btn:disabled{ opacity:.4; cursor:not-allowed; }
   .hint{ font-size:11px; color:var(--text-dim); margin-top:10px; line-height:1.5; text-align:center; }
 
-  /* ---------- LOBBY ---------- */
   .lobby-wrap{
     width:min(640px, 94vw); max-height:88vh;
     background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2));
-    border:2px solid var(--line); border-radius:14px;
-    padding:30px 30px 24px; overflow:auto;
+    border:2px solid var(--line); border-radius:14px; padding:30px 30px 24px; overflow:auto;
   }
   .lobby-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
   .lobby-head h1{ font-size:14px; color:var(--gold); margin:0;}
   .who{ font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:8px;}
   .who b{ color:var(--text); }
-  #whoAvatar{ border-radius:6px; }
-  .section-title{
-    font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim);
-    margin:24px 0 10px; display:flex; align-items:center; gap:8px;
-  }
+  #whoAvatar{ width:16px; height:16px; border-radius:4px; display:inline-block; }
+  .section-title{ font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin:24px 0 10px; display:flex; align-items:center; gap:8px; }
   .section-title::after{ content:''; flex:1; height:1px; background:var(--line); }
   .create-row{ display:flex; gap:10px; }
   .create-row input{ flex:1; }
   .create-row .btn{ width:auto; margin-top:0; padding:0 18px; white-space:nowrap; }
   .room-list{ display:flex; flex-direction:column; gap:8px; }
   .room-item{
-    display:flex; align-items:center; justify-content:space-between;
-    background:var(--bg-deep); border:1px solid var(--line); border-radius:9px;
-    padding:12px 14px; cursor:pointer; transition:border-color .12s, transform .1s;
+    display:flex; align-items:center; justify-content:space-between; background:var(--bg-deep); border:1px solid var(--line);
+    border-radius:9px; padding:12px 14px; cursor:pointer; transition:border-color .12s, transform .1s;
   }
   .room-item:hover{ border-color:var(--nebula-soft); transform:translateX(2px); }
   .room-item .rn{ font-weight:600; font-size:14px; }
@@ -136,92 +101,71 @@
   .room-item .go{ font-size:11px; color:var(--gold); }
   .empty{ font-size:12px; color:var(--text-dim); padding:14px 0; text-align:center; }
 
-  /* ---------- ROOM (GAME) ---------- */
-  #room-screen{ display:none; width:100%; height:100%; }
-  .room-layout{ display:flex; width:100%; height:100%; }
-  .stage-wrap{ flex:1; display:flex; align-items:center; justify-content:center; position:relative; padding:18px; }
+  /* ---------- 3D ROOM ---------- */
+  #room-screen{ display:none; width:100%; height:100%; position:relative; background:#7ec8e3; }
+  #gl{ position:absolute; inset:0; width:100%; height:100%; display:block; outline:none; }
+  #loadingHint{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:#fff; font-size:13px; background:rgba(10,14,39,.4); z-index:20;
+  }
   #topbar{
-    position:absolute; top:14px; left:18px; right:18px;
-    display:flex; align-items:center; justify-content:space-between; z-index:5; pointer-events:none;
+    position:absolute; top:14px; left:18px; right:18px; display:flex; align-items:center; justify-content:space-between; z-index:5;
   }
   #topbar .rname{
-    background:rgba(10,14,39,.75); border:1px solid var(--line); border-radius:8px;
-    padding:8px 14px; font-size:12px; backdrop-filter:blur(4px); pointer-events:auto;
+    background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px;
+    padding:8px 14px; font-size:12px; backdrop-filter:blur(4px); color:#fff;
   }
   #topbar .rname b{ color:var(--gold); }
   #leaveBtn{
-    pointer-events:auto;
-    background:rgba(10,14,39,.75); border:1px solid var(--line); color:var(--text);
+    background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); color:#fff;
     border-radius:8px; padding:8px 14px; font-size:12px; cursor:pointer;
   }
   #leaveBtn:hover{ border-color:var(--pink); color:var(--pink); }
-  canvas#game{
-    border-radius:12px; border:2px solid var(--line); background:#0d1230;
-    max-width:100%; max-height:100%; box-shadow: 0 20px 50px -20px rgba(0,0,0,.7);
+  #playerListMini{
+    position:absolute; top:60px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15);
+    border-radius:8px; padding:8px 12px; font-size:11.5px; color:#fff; max-width:170px; backdrop-filter:blur(4px);
   }
-  #controls-hint{
-    position:absolute; bottom:14px; left:18px;
-    background:rgba(10,14,39,.75); border:1px solid var(--line); border-radius:8px;
-    padding:7px 12px; font-size:10.5px; color:var(--text-dim);
+  #playerListMini .row{ display:flex; align-items:center; gap:6px; margin-top:4px; }
+  #playerListMini .sw{ width:8px; height:8px; border-radius:2px; flex:none; }
+  #chatFeed{
+    position:absolute; bottom:70px; left:18px; z-index:5; width:min(320px, 60vw);
+    display:flex; flex-direction:column; gap:4px; pointer-events:none;
   }
-  #clickToFocus{
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-    background:rgba(10,14,39,.92); border:2px solid var(--nebula-soft); border-radius:10px;
-    padding:12px 18px; font-size:12.5px; color:var(--text); cursor:pointer; z-index:6;
-    box-shadow:0 0 24px rgba(139,92,246,.35);
+  #chatFeed .fmsg{
+    background:rgba(10,14,39,.65); border-radius:6px; padding:5px 9px; font-size:12px; color:#fff;
+    backdrop-filter:blur(3px); animation: fadeIn .2s ease;
   }
-  canvas#game:focus{ outline:2px solid var(--nebula-soft); }
+  #chatFeed .fmsg b{ color:var(--gold); }
+  #chatFeed .fmsg.system{ color:#cfd4ff; font-style:italic; }
+  #controlsHint{
+    position:absolute; bottom:14px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15);
+    border-radius:8px; padding:7px 12px; font-size:10.5px; color:#e6e9ff;
+  }
+  #chatInputWrap{
+    position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:10; display:none;
+    background:rgba(10,14,39,.85); border:2px solid var(--nebula-soft); border-radius:10px; padding:8px; width:min(420px, 80vw);
+  }
+  #chatInputWrap input{
+    width:100%; background:transparent; border:none; outline:none; color:#fff; font-size:14px; font-family:inherit; padding:6px 10px;
+  }
+  #playerLabels{ position:absolute; inset:0; z-index:4; pointer-events:none; overflow:hidden; }
+  .plabel{ position:absolute; transform:translate(-50%,-100%); pointer-events:none; text-align:center; white-space:nowrap; }
+  .plabel .nm{ font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.8); font-weight:600; }
+  .plabel .bub{
+    background:rgba(10,14,39,.9); border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 9px;
+    font-size:12px; color:#fff; margin-bottom:4px; max-width:180px; white-space:normal;
+  }
   #dpad{
-    position:absolute; bottom:14px; right:18px; z-index:5;
-    width:110px; height:110px;
-    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
-    gap:4px;
+    position:absolute; bottom:14px; left:18px; z-index:5; width:120px; height:120px;
+    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px;
   }
   .dpad-btn{
-    background:rgba(10,14,39,.75); border:1px solid var(--line); color:var(--text);
-    border-radius:8px; font-size:14px; cursor:pointer; user-select:none;
-    display:flex; align-items:center; justify-content:center;
+    background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.2); color:#fff; border-radius:8px;
+    font-size:14px; cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:center;
   }
   .dpad-btn:active, .dpad-btn.pressed{ background:var(--nebula); border-color:var(--nebula-soft); }
-  .dp-up{ grid-column:2; grid-row:1; }
-  .dp-left{ grid-column:1; grid-row:2; }
-  .dp-down{ grid-column:2; grid-row:3; }
-  .dp-right{ grid-column:3; grid-row:2; }
-  @media (max-width: 760px){
-    #dpad{ width:130px; height:130px; }
-  }
-  .side{
-    width:290px; min-width:260px; height:100%;
-    background:var(--bg-panel); border-left:2px solid var(--line);
-    display:flex; flex-direction:column;
-  }
-  .side h2{
-    font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim);
-    padding:16px 16px 10px; margin:0; border-bottom:1px solid var(--line);
-  }
-  #playerList{ padding:10px 16px; font-size:12.5px; display:flex; flex-direction:column; gap:6px; max-height:130px; overflow:auto; }
-  .plrow{ display:flex; align-items:center; gap:8px; }
-  .plrow .sw{ width:10px; height:10px; border-radius:3px; flex:none; }
-  #chatBox{ flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:10px; }
-  .msg{ font-size:13px; line-height:1.4; }
-  .msg .nm{ font-weight:700; }
-  .msg .tx{ color:var(--text); }
-  .msg.system{ color:var(--text-dim); font-style:italic; font-size:12px; }
-  #chatForm{ display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); }
-  #chatInput{
-    flex:1; background:var(--bg-deep); border:1px solid var(--line); border-radius:8px;
-    padding:10px 12px; color:var(--text); font-family:inherit; font-size:13px; outline:none;
-  }
-  #chatInput:focus{ border-color:var(--nebula-soft); }
-  #sendBtn{
-    background:var(--nebula); border:none; border-radius:8px; padding:0 14px; color:#fff; cursor:pointer; font-size:13px; font-weight:600;
-  }
-  #sendBtn:hover{ background:var(--nebula-soft); }
-
-  @media (max-width: 760px){
-    .side{ width:230px; min-width:200px; }
-    #controls-hint{ display:none; }
-  }
+  .dp-up{ grid-column:2; grid-row:1; } .dp-left{ grid-column:1; grid-row:2; }
+  .dp-down{ grid-column:2; grid-row:3; } .dp-right{ grid-column:3; grid-row:2; }
 </style>
 </head>
 <body>
@@ -236,18 +180,16 @@
       <div class="brand"><div class="dot"></div><h1 class="pixel">NÉBULA</h1></div>
       <label for="nameInput">Seu nome</label>
       <input type="text" id="nameInput" maxlength="16" placeholder="Como querem te chamar?">
-
       <label>Escolha seu personagem</label>
       <div class="avatar-picker">
         <button class="arrow-btn" id="prevAvatar">&#8592;</button>
-        <div class="avatar-stage"><canvas id="avatarPreview" width="120" height="150"></canvas></div>
+        <div class="avatar-stage"><canvas id="avatarPreview"></canvas></div>
         <button class="arrow-btn" id="nextAvatar">&#8594;</button>
       </div>
       <div class="avatar-name" id="avatarName">—</div>
       <div class="avatar-dots" id="avatarDots"></div>
-
       <button class="btn" id="toLobbyBtn" disabled>Entrar na praça</button>
-      <div class="hint">Ande com WASD ou as setas do teclado. Crie sua própria sala ou entre em uma existente na próxima tela.</div>
+      <div class="hint">Ande com WASD ou as setas. Aperte Enter pra abrir o chat. Crie sua sala ou entre numa existente.</div>
     </div>
   </div>
 
@@ -256,48 +198,38 @@
     <div class="lobby-wrap">
       <div class="lobby-head">
         <h1 class="pixel">SALAS</h1>
-        <div class="who"><canvas id="whoAvatar" width="26" height="32"></canvas> oi, <b id="who-name"></b></div>
+        <div class="who"><span id="whoAvatar"></span> oi, <b id="who-name"></b></div>
       </div>
-
       <div class="section-title">criar sala</div>
       <div class="create-row">
         <input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)">
         <button class="btn" id="createRoomBtn">Criar e entrar</button>
       </div>
-
       <div class="section-title">salas abertas</div>
       <div class="room-list" id="roomList"><div class="empty">carregando…</div></div>
     </div>
   </div>
 
-  <!-- ROOM / GAME -->
+  <!-- ROOM / 3D GAME -->
   <div id="room-screen">
-    <div class="room-layout">
-      <div class="stage-wrap">
-        <div id="topbar">
-          <div class="rname">você está em <b id="currentRoomName"></b></div>
-          <button id="leaveBtn">← sair da sala</button>
-        </div>
-        <canvas id="game" width="760" height="520" tabindex="0"></canvas>
-        <div id="clickToFocus">clique aqui pra ativar o teclado</div>
-        <div id="controls-hint">WASD / setas para andar · Enter para conversar</div>
-        <div id="dpad">
-          <button type="button" class="dpad-btn dp-up" data-key="w">▲</button>
-          <button type="button" class="dpad-btn dp-left" data-key="a">◀</button>
-          <button type="button" class="dpad-btn dp-down" data-key="s">▼</button>
-          <button type="button" class="dpad-btn dp-right" data-key="d">▶</button>
-        </div>
-      </div>
-      <div class="side">
-        <h2>quem está aqui (<span id="playerCount">0</span>)</h2>
-        <div id="playerList"></div>
-        <h2 style="border-top:1px solid var(--line);">conversa</h2>
-        <div id="chatBox"></div>
-        <form id="chatForm">
-          <input type="text" id="chatInput" maxlength="140" placeholder="Diga algo…" autocomplete="off">
-          <button type="button" id="sendBtn">Enviar</button>
-        </form>
-      </div>
+    <canvas id="gl" tabindex="0"></canvas>
+    <div id="playerLabels"></div>
+    <div id="loadingHint">carregando o mundo…</div>
+    <div id="topbar">
+      <div class="rname">você está em <b id="currentRoomName"></b></div>
+      <button id="leaveBtn">← sair da sala</button>
+    </div>
+    <div id="playerListMini">quem está aqui (<span id="playerCount">0</span>)<div id="playerListRows"></div></div>
+    <div id="chatFeed"></div>
+    <div id="controlsHint">WASD para andar · Enter para conversar</div>
+    <div id="dpad">
+      <button type="button" class="dpad-btn dp-up" data-key="w">▲</button>
+      <button type="button" class="dpad-btn dp-left" data-key="a">◀</button>
+      <button type="button" class="dpad-btn dp-down" data-key="s">▼</button>
+      <button type="button" class="dpad-btn dp-right" data-key="d">▶</button>
+    </div>
+    <div id="chatInputWrap">
+      <input type="text" id="chatInput" maxlength="140" placeholder="Diga algo… (Enter envia, Esc cancela)" autocomplete="off">
     </div>
   </div>
 
@@ -306,10 +238,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <script>
-/* =====================================================================
-   COLE AQUI a config do SEU projeto Firebase (veja o passo a passo).
-   Console Firebase > Configurações do projeto > Seus apps > Config
-===================================================================== */
 const firebaseConfig = {
   apiKey: "AIzaSyDAaChRHWcp2FMhLqsQCOSHBzcGKf0HXsk",
   authDomain: "galaxy2-b7a2f.firebaseapp.com",
@@ -322,8 +250,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* ================= STARFIELD BACKGROUND ================= */
+/* ================= STARFIELD (login/lobby background) ================= */
 (function(){
   const c = document.getElementById('stars');
   const ctx = c.getContext('2d');
@@ -348,122 +277,102 @@ const db = firebase.database();
   requestAnimationFrame(loop);
 })();
 
-/* ================= AVATAR DEFINITIONS (original chibi designs) ================= */
-// Each avatar is drawn procedurally with canvas shapes — not copied art.
+/* ================= AVATAR DEFINITIONS ================= */
 const AVATARS = [
-  {name:'Programador', skin:'#f0c49c', hair:'#22262f', hairStyle:'short',  outfit:'#2f3b63', outfit2:'#1c2544', accessory:'glasses'},
-  {name:'Sonhadora',   skin:'#f7d3b0', hair:'#e8c15a', hairStyle:'long',   outfit:'#eaeaf5', outfit2:'#c9b6e8', accessory:'none'},
-  {name:'Roqueiro',    skin:'#d99a6c', hair:'#3a2418', hairStyle:'mohawk', outfit:'#8b5cf6', outfit2:'#5b3a9e', accessory:'none'},
-  {name:'Skatista',    skin:'#f0c49c', hair:'#7a4a2b', hairStyle:'cap',    outfit:'#ff6fa5', outfit2:'#c94a7d', accessory:'cap'},
-  {name:'Viajante',    skin:'#c98857', hair:'#101010', hairStyle:'curly', outfit:'#ffc857', outfit2:'#c99a2f', accessory:'none'},
-  {name:'Artista',     skin:'#f7d3b0', hair:'#b23b5a', hairStyle:'bob',   outfit:'#38bdf8', outfit2:'#1f7fae', accessory:'none'},
-  {name:'Ciclista',    skin:'#e0aa78', hair:'#4a3323', hairStyle:'short', outfit:'#4ade80', outfit2:'#2f9e5c', accessory:'glasses'},
-  {name:'Fotógrafa',   skin:'#f0c49c', hair:'#1c1c1c', hairStyle:'long',  outfit:'#f97316', outfit2:'#b6520f', accessory:'none'}
+  {name:'Programador', skin:0xf0c49c, hair:0x22262f, outfit:0x2f3b63, outfit2:0x1c2544},
+  {name:'Sonhadora',   skin:0xf7d3b0, hair:0xe8c15a, outfit:0xeaeaf5, outfit2:0xc9b6e8},
+  {name:'Roqueiro',    skin:0xd99a6c, hair:0x3a2418, outfit:0x8b5cf6, outfit2:0x5b3a9e},
+  {name:'Skatista',    skin:0xf0c49c, hair:0x7a4a2b, outfit:0xff6fa5, outfit2:0xc94a7d},
+  {name:'Viajante',    skin:0xc98857, hair:0x101010, outfit:0xffc857, outfit2:0xc99a2f},
+  {name:'Artista',     skin:0xf7d3b0, hair:0xb23b5a, outfit:0x38bdf8, outfit2:0x1f7fae},
+  {name:'Ciclista',    skin:0xe0aa78, hair:0x4a3323, outfit:0x4ade80, outfit2:0x2f9e5c},
+  {name:'Fotógrafa',   skin:0xf0c49c, hair:0x1c1c1c, outfit:0xf97316, outfit2:0xb6520f}
 ];
 
-function drawChibi(c, x, y, def, opts){
-  opts = opts || {};
-  const scale = opts.scale || 1;
-  const dir = opts.dir || 'down';
-  const legPhase = opts.legPhase || 0;
-  const isMe = !!opts.isMe;
-  c.save();
-  c.translate(x, y);
-  c.scale(scale, scale);
+/* build a low-poly humanoid character with limbs that can swing for a walk cycle */
+function buildCharacter(def){
+  const g = new THREE.Group();
+  const matSkin = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.85});
+  const matOutfit = new THREE.MeshStandardMaterial({color:def.outfit, roughness:0.75});
+  const matOutfit2 = new THREE.MeshStandardMaterial({color:def.outfit2, roughness:0.75});
+  const matHair = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.6});
 
-  // shadow
-  c.fillStyle = 'rgba(0,0,0,0.35)';
-  c.beginPath(); c.ellipse(0, 34, 15, 5, 0, 0, Math.PI*2); c.fill();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.56,0.28), matOutfit);
+  torso.position.y = 1.02; torso.castShadow = true;
+  g.add(torso);
 
-  // legs (swing when walking)
-  const swing = Math.sin(legPhase) * 6;
-  c.fillStyle = def.outfit2;
-  roundRectPath(c, -9, 12, 7, 18 + Math.max(0,swing*0.4), 3);
-  c.fill();
-  roundRectPath(c, 2, 12, 7, 18 + Math.max(0,-swing*0.4), 3);
-  c.fill();
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21,14,12), matSkin);
+  head.position.y = 1.52; head.castShadow = true;
+  g.add(head);
 
-  // torso
-  c.fillStyle = def.outfit;
-  roundRectPath(c, -12, -8, 24, 24, 7);
-  c.fill();
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.225,14,10,0,Math.PI*2,0,Math.PI*0.62), matHair);
+  hair.position.y = 1.59;
+  g.add(hair);
 
-  // arms
-  c.fillStyle = def.outfit;
-  roundRectPath(c, -16, -6, 6, 16, 3); c.fill();
-  roundRectPath(c, 10, -6, 6, 16, 3); c.fill();
-
-  // neck/head
-  c.fillStyle = def.skin;
-  c.beginPath(); c.arc(0, -16, 11, 0, Math.PI*2); c.fill();
-
-  // hair (behind/around head depending on style)
-  c.fillStyle = def.hair;
-  if(def.hairStyle==='short'){
-    c.beginPath(); c.arc(0,-19,11.5,Math.PI,Math.PI*2); c.fill();
-  } else if(def.hairStyle==='long'){
-    c.beginPath(); c.arc(0,-19,11.5,Math.PI,Math.PI*2); c.fill();
-    roundRectPath(c,-13,-20,5,22,3); c.fill();
-    roundRectPath(c,8,-20,5,22,3); c.fill();
-  } else if(def.hairStyle==='mohawk'){
-    c.beginPath(); c.arc(0,-19,10,Math.PI*0.15,Math.PI*0.85,true); c.fill();
-    roundRectPath(c,-2,-30,4,12,2); c.fill();
-  } else if(def.hairStyle==='cap'){
-    roundRectPath(c,-12,-27,24,9,4); c.fill();
-    roundRectPath(c,-2,-20,16,5,2); c.fill();
-  } else if(def.hairStyle==='curly'){
-    for(let i=-1;i<=1;i++){
-      c.beginPath(); c.arc(i*7,-25,6,0,Math.PI*2); c.fill();
-    }
-    c.beginPath(); c.arc(0,-19,11.5,Math.PI,Math.PI*2); c.fill();
-  } else if(def.hairStyle==='bob'){
-    c.beginPath(); c.arc(0,-18,12,Math.PI*0.9,Math.PI*2.1); c.fill();
+  function limb(mat, len, rad, x, y){
+    const pivot = new THREE.Group();
+    pivot.position.set(x,y,0);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad*0.82, len, 8), mat);
+    mesh.position.y = -len/2;
+    mesh.castShadow = true;
+    pivot.add(mesh);
+    g.add(pivot);
+    return pivot;
   }
+  const armL = limb(matOutfit, 0.40, 0.062, -0.30, 1.28);
+  const armR = limb(matOutfit, 0.40, 0.062,  0.30, 1.28);
+  const legL = limb(matOutfit2, 0.52, 0.09, -0.12, 0.70);
+  const legR = limb(matOutfit2, 0.52, 0.09,  0.12, 0.70);
 
-  // face
-  c.fillStyle = 'rgba(30,20,15,0.85)';
-  if(dir!=='up'){
-    let ex = dir==='left' ? -3 : dir==='right' ? 3 : 0;
-    c.beginPath(); c.arc(-4+ex,-16,1.6,0,Math.PI*2); c.fill();
-    c.beginPath(); c.arc(4+ex,-16,1.6,0,Math.PI*2); c.fill();
-  }
-
-  // accessory
-  if(def.accessory==='glasses' && dir!=='up'){
-    c.fillStyle='rgba(20,20,25,0.9)';
-    roundRectPath(c,-8,-18,7,4,1.5); c.fill();
-    roundRectPath(c,1,-18,7,4,1.5); c.fill();
-  }
-  if(def.accessory==='cap'){
-    c.fillStyle = def.outfit2;
-    roundRectPath(c,-12,-29,24,7,4); c.fill();
-    roundRectPath(c,4,-24,10,4,2); c.fill();
-  }
-
-  c.restore();
+  g.userData = {armL, armR, legL, legR, walkPhase:0};
+  return g;
 }
-function roundRectPath(c,x,y,w,h,r){
-  c.beginPath();
-  c.moveTo(x+r,y);
-  c.arcTo(x+w,y,x+w,y+h,r);
-  c.arcTo(x+w,y+h,x,y+h,r);
-  c.arcTo(x,y+h,x,y,r);
-  c.arcTo(x,y,x+w,y,r);
-  c.closePath();
+function animateWalk(group, moving, dt){
+  const u = group.userData;
+  if(moving){ u.walkPhase += dt*7; } else { u.walkPhase *= 0.85; }
+  const s = Math.sin(u.walkPhase) * 0.55;
+  u.legL.rotation.x = s; u.legR.rotation.x = -s;
+  u.armL.rotation.x = -s*0.8; u.armR.rotation.x = s*0.8;
 }
 
-/* ---- avatar carousel on login ---- */
+/* ---- login preview: small rotating 3D character ---- */
 let avatarIndex = 0;
-const avatarPreviewCanvas = document.getElementById('avatarPreview');
-const avatarPreviewCtx = avatarPreviewCanvas.getContext('2d');
-let previewLegPhase = 0;
-function renderAvatarPreview(t){
-  previewLegPhase += 0.05;
-  avatarPreviewCtx.clearRect(0,0,120,150);
-  drawChibi(avatarPreviewCtx, 60, 90, AVATARS[avatarIndex], {scale:2.1, dir:'down', legPhase: Math.sin(previewLegPhase)*1.2, isMe:true});
-  requestAnimationFrame(renderAvatarPreview);
+let previewScene, previewCamera, previewRenderer, previewChar, previewActive = true;
+function initAvatarPreview(){
+  const canvas = document.getElementById('avatarPreview');
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(35, 150/170, 0.1, 20);
+  previewCamera.position.set(0, 1.25, 2.6);
+  previewCamera.lookAt(0,1.05,0);
+  previewRenderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  previewRenderer.setSize(150,170,false);
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x22264a, 1.0);
+  previewScene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+  dir.position.set(2,3,2);
+  previewScene.add(dir);
+  rebuildAvatarPreviewChar();
+  requestAnimationFrame(previewLoop);
 }
-requestAnimationFrame(renderAvatarPreview);
+function rebuildAvatarPreviewChar(){
+  if(previewChar) previewScene.remove(previewChar);
+  previewChar = buildCharacter(AVATARS[avatarIndex]);
+  previewScene.add(previewChar);
+}
+let previewT = 0;
+function previewLoop(t){
+  if(previewActive){
+    previewT += 0.016;
+    if(previewChar){
+      previewChar.rotation.y = Math.sin(previewT*0.6)*0.5;
+      animateWalk(previewChar, true, 0.016);
+    }
+    previewRenderer.render(previewScene, previewCamera);
+  }
+  requestAnimationFrame(previewLoop);
+}
+initAvatarPreview();
 
 function renderAvatarDots(){
   const el = document.getElementById('avatarDots');
@@ -477,6 +386,7 @@ function renderAvatarDots(){
 function updateAvatarLabel(){
   document.getElementById('avatarName').textContent = AVATARS[avatarIndex].name;
   renderAvatarDots();
+  rebuildAvatarPreviewChar();
 }
 document.getElementById('prevAvatar').addEventListener('click', ()=>{
   avatarIndex = (avatarIndex - 1 + AVATARS.length) % AVATARS.length;
@@ -490,7 +400,6 @@ updateAvatarLabel();
 
 /* ================= IDENTITY ================= */
 let myId = null, myName = '', myAvatarIndex = 0;
-
 async function loadIdentity(){
   try{
     const raw = localStorage.getItem('nebula_identity');
@@ -498,7 +407,7 @@ async function loadIdentity(){
       const d = JSON.parse(raw);
       myId = d.id; myName = d.name || ''; myAvatarIndex = (d.avatarIndex!=null) ? d.avatarIndex : 0;
     }
-  }catch(e){ /* no identity yet */ }
+  }catch(e){}
   if(!myId){ myId = 'p_' + Math.random().toString(36).slice(2,10); }
 }
 async function saveIdentity(){
@@ -508,26 +417,22 @@ async function saveIdentity(){
 /* ================= LOGIN SCREEN ================= */
 const nameInput = document.getElementById('nameInput');
 const toLobbyBtn = document.getElementById('toLobbyBtn');
-nameInput.addEventListener('input', ()=>{
-  toLobbyBtn.disabled = nameInput.value.trim().length === 0;
-});
+nameInput.addEventListener('input', ()=>{ toLobbyBtn.disabled = nameInput.value.trim().length === 0; });
 toLobbyBtn.addEventListener('click', async ()=>{
   myName = nameInput.value.trim().slice(0,16) || 'Visitante';
   myAvatarIndex = avatarIndex;
   await saveIdentity();
+  previewActive = false;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('lobby-screen').style.display='flex';
   document.getElementById('who-name').textContent = myName;
-  const whoCtx = document.getElementById('whoAvatar').getContext('2d');
-  whoCtx.clearRect(0,0,26,32);
-  drawChibi(whoCtx, 13, 22, AVATARS[myAvatarIndex], {scale:0.55, dir:'down'});
+  document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
   refreshRoomList();
 });
 
 /* ================= LOBBY: ROOMS ================= */
 const roomListEl = document.getElementById('roomList');
 const DEFAULT_ROOM = {id:'praca-central', name:'Praça Central', system:true};
-
 async function getRoomList(){
   try{
     const snap = await db.ref('rooms').once('value');
@@ -544,10 +449,7 @@ async function refreshRoomList(){
 }
 function renderRoomList(rooms){
   roomListEl.innerHTML='';
-  if(rooms.length===0){
-    roomListEl.innerHTML = '<div class="empty">nenhuma sala ainda — crie a primeira!</div>';
-    return;
-  }
+  if(rooms.length===0){ roomListEl.innerHTML = '<div class="empty">nenhuma sala ainda — crie a primeira!</div>'; return; }
   rooms.forEach(room=>{
     const item = document.createElement('div');
     item.className='room-item';
@@ -563,63 +465,148 @@ document.getElementById('createRoomBtn').addEventListener('click', async ()=>{
   const name = input.value.trim().slice(0,24);
   if(!name) return;
   const id = 'r_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,20) + '_' + Math.random().toString(36).slice(2,6);
-  try{
-    await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now()});
-  }catch(e){ console.error('create room error', e); }
+  try{ await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now()}); }catch(e){ console.error(e); }
   input.value='';
   enterRoom(id, name);
 });
-
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-/* ================= ROOM / GAME ================= */
+/* ================= 3D ROOM / GAME ================= */
 let currentRoom = null;
-const players = {}; // id -> {name,avatarIndex,x,y,dir,updatedAt,moving,px,py,legPhase,bubbleText,bubbleUntil}
-const canvas = document.getElementById('game');
-const ctx2d = canvas.getContext('2d');
-const WORLD = {w:760, h:520};
-
-const OBSTACLES = [
-  {x:70,y:70,w:110,h:60},
-  {x:580,y:70,w:110,h:50},
-  {x:60,y:400,w:130,h:55},
-  {x:560,y:400,w:130,h:60},
-  {x:330,y:120,w:100,h:45},
-];
-
-let me = {x: WORLD.w/2, y: WORLD.h/2, dir:'down', legPhase:0, moving:false};
+let scene, camera, renderer, glCanvas, clock;
+let myChar, myMoving=false;
+const me = {x:0, z:6, rotY:0, targetRotY:0};
+const WORLD_RADIUS = 34;
+const remote = {}; // id -> {group, data, targetX, targetZ, targetRotY, labelEl}
 const keys = {};
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
+
+function buildWorld(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x8fd0ee);
+  scene.fog = new THREE.Fog(0x9fdcf0, 20, 70);
+
+  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+
+  glCanvas = document.getElementById('gl');
+  renderer = new THREE.WebGLRenderer({canvas:glCanvas, antialias:true});
+  renderer.shadowMap.enabled = true;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+
+  const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x3a6b2f, 0.85);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff4d6, 1.15);
+  sun.position.set(18, 26, 12);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left=-40; sun.shadow.camera.right=40;
+  sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40;
+  scene.add(sun);
+
+  // rolling ground
+  const groundGeo = new THREE.PlaneGeometry(140,140,60,60);
+  groundGeo.rotateX(-Math.PI/2);
+  const pos = groundGeo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i), z=pos.getZ(i);
+    const h = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
+    pos.setY(i, h);
+  }
+  groundGeo.computeVertexNormals();
+  const groundMat = new THREE.MeshStandardMaterial({color:0x4fae4a, roughness:1});
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // scattered flowers (small colored dots) for a touch of the meadow look
+  const flowerColors = [0xffc857, 0xffffff, 0xff8fb3];
+  const flowerGeo = new THREE.ConeGeometry(0.06,0.16,5);
+  for(let i=0;i<160;i++){
+    const a = Math.random()*Math.PI*2, r = 4+Math.random()*32;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    const mat = new THREE.MeshStandardMaterial({color: flowerColors[i%3]});
+    const fl = new THREE.Mesh(flowerGeo, mat);
+    fl.position.set(x, groundHeightAt(x,z)+0.08, z);
+    fl.castShadow = false;
+    scene.add(fl);
+  }
+
+  // trees forming a forest border
+  function makeTree(x,z,scale){
+    const g = new THREE.Group();
+    const trunkH = 1.6*scale;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14*scale,0.2*scale,trunkH,7), new THREE.MeshStandardMaterial({color:0x6b4a2f, roughness:1}));
+    trunk.position.y = trunkH/2; trunk.castShadow = true;
+    g.add(trunk);
+    const leafMat = new THREE.MeshStandardMaterial({color:0x2f7d3a, roughness:0.9});
+    for(let i=0;i<3;i++){
+      const cone = new THREE.Mesh(new THREE.ConeGeometry((1.1-i*0.18)*scale, 1.3*scale, 8), leafMat);
+      cone.position.y = trunkH + i*0.85*scale;
+      cone.castShadow = true;
+      g.add(cone);
+    }
+    g.position.set(x, groundHeightAt(x,z), z);
+    scene.add(g);
+  }
+  for(let i=0;i<46;i++){
+    const a = (i/46)*Math.PI*2 + Math.random()*0.15;
+    const r = 30 + Math.random()*10;
+    makeTree(Math.cos(a)*r, Math.sin(a)*r, 0.8+Math.random()*0.7);
+  }
+  // a few inner clusters for depth (kept away from the spawn center)
+  for(let i=0;i<10;i++){
+    const a = Math.random()*Math.PI*2, r = 18+Math.random()*8;
+    makeTree(Math.cos(a)*r, Math.sin(a)*r, 0.7+Math.random()*0.5);
+  }
+
+  // bushes
+  const bushMat = new THREE.MeshStandardMaterial({color:0x2f7d3a, roughness:0.95});
+  for(let i=0;i<26;i++){
+    const a = Math.random()*Math.PI*2, r = 6+Math.random()*26;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5+Math.random()*0.4, 0), bushMat);
+    bush.position.set(x, groundHeightAt(x,z)+0.35, z);
+    bush.castShadow = true;
+    scene.add(bush);
+  }
+}
+function groundHeightAt(x,z){
+  return Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
+}
+
+function resizeRenderer(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', ()=>{ if(renderer) resizeRenderer(); });
+
 function handleKeyDown(e){
-  if(document.activeElement === document.getElementById('chatInput')) return;
+  const chatInputEl = document.getElementById('chatInput');
+  const chatOpen = document.getElementById('chatInputWrap').style.display === 'block';
+  if(!chatOpen && e.key === 'Enter' && currentRoom){
+    openChatInput();
+    e.preventDefault();
+    return;
+  }
+  if(document.activeElement === chatInputEl) return;
   const k = e.key.toLowerCase();
   keys[k] = true;
   if(MOVE_KEYS.includes(k)) e.preventDefault();
 }
-function handleKeyUp(e){
-  keys[e.key.toLowerCase()] = false;
-}
+function handleKeyUp(e){ keys[e.key.toLowerCase()] = false; }
 window.addEventListener('keydown', handleKeyDown);
 window.addEventListener('keyup', handleKeyUp);
 document.addEventListener('keydown', handleKeyDown);
 document.addEventListener('keyup', handleKeyUp);
 
-// click-to-focus so keyboard events reach this window reliably
-const clickToFocusEl = document.getElementById('clickToFocus');
-function focusGame(){
-  canvas.focus();
-  if(clickToFocusEl) clickToFocusEl.style.display = 'none';
-}
-canvas.addEventListener('click', focusGame);
-document.getElementById('room-screen').addEventListener('click', focusGame);
-
-// on-screen D-pad (mouse + touch), also useful on mobile
 document.querySelectorAll('.dpad-btn').forEach(btn=>{
   const k = btn.getAttribute('data-key');
   const press = (e)=>{ e.preventDefault(); keys[k]=true; btn.classList.add('pressed'); };
-  const release = (e)=>{ keys[k]=false; btn.classList.remove('pressed'); };
+  const release = ()=>{ keys[k]=false; btn.classList.remove('pressed'); };
   btn.addEventListener('mousedown', press);
   btn.addEventListener('touchstart', press, {passive:false});
   btn.addEventListener('mouseup', release);
@@ -628,72 +615,107 @@ document.querySelectorAll('.dpad-btn').forEach(btn=>{
   btn.addEventListener('touchcancel', release);
 });
 
-function collides(x,y){
-  const r=13;
-  if(x-r<10||x+r>WORLD.w-10||y-r<10||y+r>WORLD.h-10) return true;
-  for(const o of OBSTACLES){
-    if(x+r>o.x && x-r<o.x+o.w && y+r>o.y && y-r<o.y+o.h) return true;
-  }
-  return false;
-}
-
 function updateMe(dt){
-  const speed = 160 * dt;
-  let dx=0, dy=0;
-  if(keys['w']||keys['arrowup']){ dy-=1; me.dir='up'; }
-  if(keys['s']||keys['arrowdown']){ dy+=1; me.dir='down'; }
-  if(keys['a']||keys['arrowleft']){ dx-=1; me.dir='left'; }
-  if(keys['d']||keys['arrowright']){ dx+=1; me.dir='right'; }
-  if(dx!==0 && dy!==0){ dx*=0.7071; dy*=0.7071; }
-  me.moving = (dx!==0 || dy!==0);
-  if(me.moving) me.legPhase += dt*9; else me.legPhase = 0;
-  const nx = me.x + dx*speed, ny = me.y + dy*speed;
-  if(!collides(nx, me.y)) me.x = nx;
-  if(!collides(me.x, ny)) me.y = ny;
+  let dx=0, dz=0;
+  if(keys['w']||keys['arrowup']) dz -= 1;
+  if(keys['s']||keys['arrowdown']) dz += 1;
+  if(keys['a']||keys['arrowleft']) dx -= 1;
+  if(keys['d']||keys['arrowright']) dx += 1;
+  myMoving = (dx!==0 || dz!==0);
+  if(myMoving){
+    const len = Math.hypot(dx,dz); dx/=len; dz/=len;
+    me.targetRotY = Math.atan2(dx, dz);
+    const speed = 4.2*dt;
+    const nx = me.x + dx*speed, nz = me.z + dz*speed;
+    if(Math.hypot(nx,nz) < WORLD_RADIUS){ me.x = nx; me.z = nz; }
+  }
+  // smooth turn toward movement direction
+  let diff = me.targetRotY - me.rotY;
+  while(diff > Math.PI) diff -= Math.PI*2;
+  while(diff < -Math.PI) diff += Math.PI*2;
+  me.rotY += diff * Math.min(1, dt*10);
+
+  myChar.position.set(me.x, groundHeightAt(me.x,me.z), me.z);
+  myChar.rotation.y = me.rotY;
+  animateWalk(myChar, myMoving, dt);
+
+  // third-person chase camera
+  const camDist = 4.4, camHeight = 2.2;
+  const desired = new THREE.Vector3(
+    me.x - Math.sin(me.rotY)*camDist,
+    groundHeightAt(me.x,me.z) + camHeight,
+    me.z - Math.cos(me.rotY)*camDist
+  );
+  camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
+  const lookAt = new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.15, me.z);
+  camera.lookAt(lookAt);
 }
 
-function drawRoom(){
-  ctx2d.clearRect(0,0,WORLD.w,WORLD.h);
-  ctx2d.fillStyle = '#0d1230';
-  ctx2d.fillRect(0,0,WORLD.w,WORLD.h);
-  ctx2d.strokeStyle = 'rgba(139,92,246,0.10)';
-  ctx2d.lineWidth=1;
-  for(let x=0;x<WORLD.w;x+=32){ ctx2d.beginPath(); ctx2d.moveTo(x,0); ctx2d.lineTo(x,WORLD.h); ctx2d.stroke(); }
-  for(let y=0;y<WORLD.h;y+=32){ ctx2d.beginPath(); ctx2d.moveTo(0,y); ctx2d.lineTo(WORLD.w,y); ctx2d.stroke(); }
-  ctx2d.strokeStyle = 'rgba(139,92,246,0.35)';
-  ctx2d.lineWidth=3;
-  ctx2d.strokeRect(6,6,WORLD.w-12,WORLD.h-12);
-  OBSTACLES.forEach(o=>{
-    ctx2d.fillStyle = '#1a2150';
-    ctx2d.strokeStyle = '#2b3470';
-    ctx2d.lineWidth=2;
-    roundRectPath(ctx2d,o.x,o.y,o.w,o.h,8);
-    ctx2d.fill(); ctx2d.stroke();
+function worldToScreen(vec3){
+  const v = vec3.clone().project(camera);
+  return {
+    x: (v.x*0.5+0.5) * glCanvas.clientWidth,
+    y: (-v.y*0.5+0.5) * glCanvas.clientHeight,
+    behind: v.z > 1
+  };
+}
+
+const labelsContainer = document.getElementById('playerLabels');
+const myLabelEl = document.createElement('div');
+myLabelEl.className = 'plabel';
+myLabelEl.innerHTML = `<div class="bub" id="myBub" style="display:none;"></div><div class="nm" id="myNm"></div>`;
+labelsContainer.appendChild(myLabelEl);
+let myBubbleText=null, myBubbleUntil=0;
+
+function updateLabels(){
+  const now = Date.now();
+  // me
+  const myHead = new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.9, me.z);
+  const s = worldToScreen(myHead);
+  if(!s.behind){
+    myLabelEl.style.left = s.x+'px'; myLabelEl.style.top = s.y+'px'; myLabelEl.style.display='block';
+    document.getElementById('myNm').textContent = myName;
+    const bubEl = document.getElementById('myBub');
+    if(myBubbleUntil > now && myBubbleText){ bubEl.style.display='block'; bubEl.textContent = myBubbleText; }
+    else bubEl.style.display='none';
+  } else { myLabelEl.style.display='none'; }
+
+  // remote players
+  Object.keys(remote).forEach(id=>{
+    const r = remote[id];
+    const head = new THREE.Vector3(r.group.position.x, r.group.position.y+1.9, r.group.position.z);
+    const sc = worldToScreen(head);
+    if(sc.behind){ r.labelEl.style.display='none'; return; }
+    r.labelEl.style.display='block';
+    r.labelEl.style.left = sc.x+'px'; r.labelEl.style.top = sc.y+'px';
+    const bubEl = r.labelEl.querySelector('.bub');
+    if(r.bubbleUntil > now && r.bubbleText){ bubEl.style.display='block'; bubEl.textContent = r.bubbleText; }
+    else bubEl.style.display='none';
   });
 }
 
-function drawBubbleAndName(x,y,name,bubbleText){
-  ctx2d.font = '11px Space Grotesk, sans-serif';
-  ctx2d.textAlign='center';
-  ctx2d.fillStyle='rgba(238,240,255,0.9)';
-  ctx2d.fillText(name, x, y+38);
-  if(bubbleText){
-    ctx2d.font='12px Space Grotesk, sans-serif';
-    const padding=8;
-    let txt=bubbleText;
-    if(ctx2d.measureText(txt).width>150){ while(ctx2d.measureText(txt+'…').width>150 && txt.length>1){ txt=txt.slice(0,-1);} txt+='…'; }
-    const tw = ctx2d.measureText(txt).width;
-    const bw = tw+padding*2, bh=26;
-    const bx = x-bw/2, by=y-52;
-    ctx2d.fillStyle='rgba(18,24,58,0.95)';
-    ctx2d.strokeStyle='rgba(139,92,246,0.6)';
-    ctx2d.lineWidth=1.5;
-    roundRectPath(ctx2d,bx,by,bw,bh,8);
-    ctx2d.fill(); ctx2d.stroke();
-    ctx2d.fillStyle='#eef0ff';
-    ctx2d.textAlign='center';
-    ctx2d.fillText(txt, x, by+17);
-  }
+function ensureRemoteChar(id, d){
+  if(remote[id]) return remote[id];
+  const def = AVATARS[d.avatarIndex] || AVATARS[0];
+  const group = buildCharacter(def);
+  scene.add(group);
+  const labelEl = document.createElement('div');
+  labelEl.className = 'plabel';
+  labelEl.innerHTML = `<div class="bub" style="display:none;"></div><div class="nm">${escapeHtml(d.name||'???')}</div>`;
+  labelsContainer.appendChild(labelEl);
+  remote[id] = {
+    group, targetX:d.x, targetZ:d.z, targetRotY:d.rotY||0, moving:false, labelEl,
+    bubbleText:null, bubbleUntil:0, updatedAt:Date.now(),
+    name: d.name||'???', outfitHex: def.outfit
+  };
+  return remote[id];
+}
+function removeRemoteChar(id){
+  const r = remote[id];
+  if(!r) return;
+  scene.remove(r.group);
+  r.labelEl.remove();
+  delete remote[id];
 }
 
 let lastTime = performance.now();
@@ -702,98 +724,126 @@ function gameLoop(t){
     const dt = Math.min((t-lastTime)/1000, 0.05);
     lastTime = t;
     updateMe(dt);
-    drawRoom();
-    const now = Date.now();
-    Object.values(players).forEach(p=>{
-      if(p.id===myId || !p.avatarIndexKnown) return;
-      if(now - p.updatedAt > 9000) return;
-      if(p.moving) p.legPhase = (p.legPhase||0) + dt*9; else p.legPhase = 0;
-      const def = AVATARS[p.avatarIndex] || AVATARS[0];
-      drawChibi(ctx2d, p.x, p.y, def, {dir:p.dir, legPhase: Math.sin(p.legPhase||0)*1.2, scale:1});
-      const bubble = (p.bubbleUntil && now < p.bubbleUntil) ? p.bubbleText : null;
-      drawBubbleAndName(p.x, p.y, p.name, bubble);
+    // interpolate remote players toward their networked target position
+    Object.values(remote).forEach(r=>{
+      const cx = r.group.position.x, cz = r.group.position.z;
+      const nx = cx + (r.targetX-cx)*Math.min(1,dt*8);
+      const nz = cz + (r.targetZ-cz)*Math.min(1,dt*8);
+      r.group.position.set(nx, groundHeightAt(nx,nz), nz);
+      let diff = r.targetRotY - r.group.rotation.y;
+      while(diff > Math.PI) diff -= Math.PI*2;
+      while(diff < -Math.PI) diff += Math.PI*2;
+      r.group.rotation.y += diff * Math.min(1, dt*10);
+      r.moving = Math.hypot(r.targetX-cx, r.targetZ-cz) > 0.03;
+      animateWalk(r.group, r.moving, dt);
     });
-    const myDef = AVATARS[myAvatarIndex] || AVATARS[0];
-    drawChibi(ctx2d, me.x, me.y, myDef, {dir:me.dir, legPhase: Math.sin(me.legPhase)*1.2, scale:1, isMe:true});
-    const myBubble = (myBubbleUntil && now < myBubbleUntil) ? myBubbleText : null;
-    drawBubbleAndName(me.x, me.y, myName, myBubble);
-
-    // debug HUD — shows which keys are detected and current position
-    const activeKeys = Object.keys(keys).filter(k=>keys[k]).join(' + ') || '(nenhuma)';
-    ctx2d.font = '10px monospace';
-    ctx2d.textAlign = 'left';
-    ctx2d.fillStyle = 'rgba(238,240,255,0.55)';
-    ctx2d.fillText(`teclas: ${activeKeys}  |  pos: ${Math.round(me.x)},${Math.round(me.y)}`, 14, WORLD.h-10);
-  }catch(err){
-    console.error('gameLoop error:', err);
-  }
+    updateLabels();
+    renderer.render(scene, camera);
+  }catch(err){ console.error('gameLoop error:', err); }
   if(document.getElementById('room-screen').style.display !== 'none'){
     requestAnimationFrame(gameLoop);
   }
 }
 
-let myBubbleText=null, myBubbleUntil=0;
+/* ---- chat input (appears on Enter) ---- */
+const chatInputWrap = document.getElementById('chatInputWrap');
+const chatInput = document.getElementById('chatInput');
+function openChatInput(){
+  chatInputWrap.style.display = 'block';
+  chatInput.value='';
+  chatInput.focus();
+}
+function closeChatInput(){
+  chatInputWrap.style.display = 'none';
+  chatInput.blur();
+  glCanvas.focus();
+}
+chatInput.addEventListener('keydown', e=>{
+  e.stopPropagation();
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    const text = chatInput.value.trim().slice(0,140);
+    closeChatInput();
+    if(text) sendChatMessage(text);
+  } else if(e.key === 'Escape'){
+    e.preventDefault();
+    closeChatInput();
+  }
+});
 
-let presenceRef=null, playersRef=null, messagesRef=null;
-let heartbeatTimer=null;
+function addFeedMsg(name, text, system){
+  const feed = document.getElementById('chatFeed');
+  const el = document.createElement('div');
+  el.className = 'fmsg' + (system?' system':'');
+  el.innerHTML = system ? escapeHtml(text) : `<b>${escapeHtml(name)}:</b> ${escapeHtml(text)}`;
+  feed.appendChild(el);
+  while(feed.children.length > 6) feed.removeChild(feed.firstChild);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .6s'; setTimeout(()=>el.remove(),600); }, 8000);
+}
+
+async function sendChatMessage(text){
+  const d = {id:myId, name:myName, avatarIndex:myAvatarIndex, text, ts:Date.now()};
+  myBubbleText = text; myBubbleUntil = Date.now()+4500;
+  try{
+    await db.ref(`rooms/${currentRoom}/messages`).push(d);
+  }catch(err){
+    console.error('send message error:', err);
+    addFeedMsg(myName, text);
+    addFeedMsg(null, 'a mensagem apareceu só pra você — a sincronização falhou.', true);
+  }
+}
+
+/* ---- room lifecycle ---- */
+let presenceRef=null, playersRef=null, messagesRef=null, heartbeatTimer=null;
 
 async function enterRoom(id, name){
   currentRoom = id;
   document.getElementById('lobby-screen').style.display='none';
   document.getElementById('room-screen').style.display='block';
   document.getElementById('currentRoomName').textContent = name;
-  me.x = WORLD.w/2 + (Math.random()*60-30);
-  me.y = WORLD.h/2 + (Math.random()*60-30);
-  let safety = 0;
-  while(collides(me.x, me.y) && safety < 50){
-    me.x = WORLD.w/2; me.y = WORLD.h/2 + 120; // fallback open spot near bottom-center
-    safety++;
-    if(safety>1){ me.y += 10; }
-  }
-  Object.keys(players).forEach(k=>delete players[k]);
-  document.getElementById('chatBox').innerHTML='';
-  addSystemMsg('você entrou na sala.');
+  document.getElementById('loadingHint').style.display='flex';
 
+  if(!scene){ buildWorld(); }
+  resizeRenderer();
+  if(myChar) scene.remove(myChar);
+  myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0]);
+  scene.add(myChar);
+
+  me.x = (Math.random()*10-5); me.z = (Math.random()*10-5); me.rotY = 0; me.targetRotY = 0;
+  Object.keys(remote).forEach(removeRemoteChar);
+  document.getElementById('chatFeed').innerHTML='';
+  addFeedMsg(null, 'você entrou na sala.', true);
+
+  document.getElementById('loadingHint').style.display='none';
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
-  setTimeout(focusGame, 50);
+  setTimeout(()=>glCanvas.focus(), 60);
 
-  // presence: write my state, auto-remove if I disconnect (close tab, lose connection, etc.)
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
-  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, x:Math.round(me.x), y:Math.round(me.y), dir:me.dir, updatedAt:Date.now()};
-  try{
-    await presenceRef.set(initialData);
-    presenceRef.onDisconnect().remove();
-  }catch(e){ console.error('presence set error', e); }
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  try{ await presenceRef.set(initialData); presenceRef.onDisconnect().remove(); }catch(e){ console.error('presence set error', e); }
   heartbeatTimer = setInterval(pushPresence, 150);
 
-  // live players list
   playersRef = db.ref(`rooms/${id}/players`);
   playersRef.on('value', snap=>{
     const val = snap.val() || {};
-    Object.keys(players).forEach(k=>{ if(!val[k]) delete players[k]; });
+    Object.keys(remote).forEach(pid=>{ if(!val[pid]) removeRemoteChar(pid); });
     Object.keys(val).forEach(pid=>{
       if(pid===myId) return;
       const d = val[pid];
-      const prev = players[pid];
-      const moving = prev ? (Math.abs(prev.x-d.x)>1 || Math.abs(prev.y-d.y)>1) : false;
-      players[pid] = {...prev, ...d, moving, avatarIndexKnown:true};
+      const r = ensureRemoteChar(pid, d);
+      r.targetX = d.x; r.targetZ = d.z; r.targetRotY = d.rotY||0; r.updatedAt = d.updatedAt;
     });
     updatePlayerListUI();
   });
 
-  // live chat — only new messages from now on for a clean join experience
   messagesRef = db.ref(`rooms/${id}/messages`);
   const joinedAt = Date.now();
   messagesRef.orderByChild('ts').startAt(joinedAt).on('child_added', snap=>{
     const d = snap.val();
     if(!d) return;
-    renderChatMsg(d);
-    if(d.id!==myId){
-      if(!players[d.id]) players[d.id]={};
-      players[d.id].bubbleText = d.text;
-      players[d.id].bubbleUntil = Date.now()+4500;
-    }
+    addFeedMsg(d.name, d.text);
+    if(d.id!==myId && remote[d.id]){ remote[d.id].bubbleText = d.text; remote[d.id].bubbleUntil = Date.now()+4500; }
   });
 }
 
@@ -815,72 +865,26 @@ window.addEventListener('beforeunload', ()=>{ if(presenceRef) presenceRef.remove
 
 async function pushPresence(){
   if(!currentRoom || !presenceRef) return;
-  try{
-    await presenceRef.update({x:Math.round(me.x), y:Math.round(me.y), dir:me.dir, updatedAt:Date.now()});
-  }catch(e){ /* transient network hiccup, ignore */ }
+  try{ await presenceRef.update({x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()}); }catch(e){}
 }
 
 function updatePlayerListUI(){
   const now = Date.now();
-  const active = Object.values(players).filter(p=>p.id && p.avatarIndexKnown && now-p.updatedAt<9000);
+  const active = Object.keys(remote).filter(id => now - remote[id].updatedAt < 9000);
   document.getElementById('playerCount').textContent = active.length+1;
-  const el = document.getElementById('playerList');
-  el.innerHTML='';
+  const rows = document.getElementById('playerListRows');
+  rows.innerHTML='';
   const myDef = AVATARS[myAvatarIndex] || AVATARS[0];
-  const meRow = document.createElement('div');
-  meRow.className='plrow';
-  meRow.innerHTML = `<div class="sw" style="background:${myDef.outfit}"></div><div>${escapeHtml(myName)} (você)</div>`;
-  el.appendChild(meRow);
-  active.forEach(p=>{
-    const def = AVATARS[p.avatarIndex] || AVATARS[0];
-    const row = document.createElement('div');
-    row.className='plrow';
-    row.innerHTML = `<div class="sw" style="background:${def.outfit}"></div><div>${escapeHtml(p.name||'???')}</div>`;
-    el.appendChild(row);
+  const meRow = document.createElement('div'); meRow.className='row';
+  meRow.innerHTML = `<div class="sw" style="background:#${myDef.outfit.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(myName)} (você)</div>`;
+  rows.appendChild(meRow);
+  active.forEach(id=>{
+    const r = remote[id];
+    const row = document.createElement('div'); row.className='row';
+    row.innerHTML = `<div class="sw" style="background:#${r.outfitHex.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(r.name)}</div>`;
+    rows.appendChild(row);
   });
 }
-
-function addSystemMsg(text){
-  const box = document.getElementById('chatBox');
-  const d = document.createElement('div');
-  d.className='msg system';
-  d.textContent = text;
-  box.appendChild(d);
-  box.scrollTop = box.scrollHeight;
-}
-function renderChatMsg(d){
-  const box = document.getElementById('chatBox');
-  const def = AVATARS[d.avatarIndex] || AVATARS[0];
-  const el = document.createElement('div');
-  el.className='msg';
-  el.innerHTML = `<span class="nm" style="color:${def.outfit}">${escapeHtml(d.name)}:</span> <span class="tx">${escapeHtml(d.text)}</span>`;
-  box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
-}
-
-async function sendChatMessage(){
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim().slice(0,140);
-  if(!text || !currentRoom) return;
-  input.value='';
-  const ts = Date.now();
-  const d = {id:myId, name:myName, avatarIndex:myAvatarIndex, text, ts};
-  myBubbleText = text; myBubbleUntil = Date.now()+4500;
-  try{
-    await db.ref(`rooms/${currentRoom}/messages`).push(d);
-    // no local renderChatMsg here — the live listener (child_added) renders
-    // it for everyone, including me, so it isn't shown twice.
-  }catch(err){
-    console.error('send message error:', err);
-    renderChatMsg(d); // fallback: at least show it to me locally
-    addSystemMsg('a mensagem apareceu só pra você — a sincronização com outros jogadores falhou.');
-  }
-}
-document.getElementById('chatForm').addEventListener('submit', e=>{ e.preventDefault(); sendChatMessage(); });
-document.getElementById('sendBtn').addEventListener('click', ()=> sendChatMessage());
-document.getElementById('chatInput').addEventListener('keydown', e=>{
-  if(e.key === 'Enter'){ e.preventDefault(); sendChatMessage(); }
-});
 
 /* ================= INIT ================= */
 (async function init(){
