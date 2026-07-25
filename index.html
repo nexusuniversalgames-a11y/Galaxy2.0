@@ -373,7 +373,10 @@ function tryLoadRealisticModel(){
   });
 }
 function buildCharacterRealistic(def){
+  const wrapper = new THREE.Group();
   const clone = THREE.SkeletonUtils.clone(realisticGLTF.scene);
+  clone.rotation.y = Math.PI; // the model's own "front" faces the opposite way we need — flip it
+  wrapper.add(clone);
   clone.traverse(o=>{
     if(o.isMesh){
       o.castShadow = true; o.receiveShadow = true;
@@ -390,8 +393,8 @@ function buildCharacterRealistic(def){
   const walkAction = walkClip ? mixer.clipAction(walkClip) : null;
   const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
   if(idleAction) idleAction.play();
-  clone.userData = {kind:'realistic', mixer, walkAction, idleAction, current: idleAction, moving:false};
-  return clone;
+  wrapper.userData = {kind:'realistic', mixer, walkAction, idleAction, current: idleAction, moving:false};
+  return wrapper;
 }
 function animateRealisticWalk(group, moving){
   const u = group.userData;
