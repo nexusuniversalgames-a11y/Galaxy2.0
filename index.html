@@ -8,31 +8,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg-deep:#0a0e27;
-    --bg-panel:#12183a;
-    --bg-panel-2:#1a2150;
-    --line: #2b3470;
-    --nebula:#8b5cf6;
-    --nebula-soft:#a78bfa;
-    --gold:#ffc857;
-    --pink:#ff6fa5;
-    --text:#eef0ff;
-    --text-dim:#9aa3d6;
+    --bg-deep:#0a0e27; --bg-panel:#12183a; --bg-panel-2:#1a2150; --line:#2b3470;
+    --nebula:#8b5cf6; --nebula-soft:#a78bfa; --gold:#ffc857; --pink:#ff6fa5;
+    --text:#eef0ff; --text-dim:#9aa3d6; --danger:#ff6b6b; --ok:#4ade80;
   }
   *{box-sizing:border-box;}
-  html,body{
-    margin:0; padding:0; height:100%;
-    background:var(--bg-deep);
-    color:var(--text);
-    font-family:'Space Grotesk', sans-serif;
-    overflow:hidden;
-  }
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg-deep); color:var(--text); font-family:'Space Grotesk', sans-serif; overflow:hidden; }
   .pixel{ font-family:'Press Start 2P', monospace; }
   #stars{ position:fixed; inset:0; z-index:0; pointer-events:none; }
   #app{ position:relative; z-index:1; height:100%; width:100%; display:flex; align-items:center; justify-content:center; }
-
-  /* ---------- LOGIN / LOBBY (unchanged UI chrome) ---------- */
-  .screen{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; animation: fadeIn .5s ease; }
+  .screen{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; animation: fadeIn .5s ease; overflow:auto; padding:20px 0; }
   @keyframes fadeIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
   .card{
     background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2));
@@ -44,11 +29,14 @@
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.4;} }
   .brand h1{ font-size:13px; letter-spacing:1px; margin:0; color:var(--gold); }
   label{ display:block; font-size:11px; color:var(--text-dim); margin:16px 0 8px; letter-spacing:.5px; text-transform:uppercase; }
-  input[type=text]{
+  input[type=text], input[type=email], input[type=password]{
     width:100%; padding:12px 14px; border-radius:8px; background:var(--bg-deep); border:2px solid var(--line);
     color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:15px; outline:none; transition:border-color .15s;
   }
-  input[type=text]:focus{ border-color:var(--nebula-soft); }
+  input:focus{ border-color:var(--nebula-soft); }
+  .tabs{ display:flex; gap:6px; background:var(--bg-deep); border-radius:9px; padding:4px; margin-bottom:4px; }
+  .tab-btn{ flex:1; padding:9px; border:none; border-radius:7px; background:transparent; color:var(--text-dim); font-size:12.5px; font-weight:700; cursor:pointer; }
+  .tab-btn.active{ background:var(--nebula); color:#fff; }
   .avatar-picker{ display:flex; align-items:center; justify-content:center; gap:14px; margin-top:6px; }
   .arrow-btn{
     width:38px; height:38px; border-radius:50%; border:2px solid var(--line); background:var(--bg-deep); color:var(--text);
@@ -59,7 +47,7 @@
   .avatar-stage{
     width:150px; height:170px; border-radius:12px;
     background:radial-gradient(circle at 50% 30%, rgba(139,92,246,.18), transparent 70%), var(--bg-deep);
-    border:2px solid var(--line); overflow:hidden;
+    border:2px solid var(--line); overflow:hidden; margin:0 auto;
   }
   #avatarPreview{ width:100%; height:100%; display:block; }
   .avatar-name{ text-align:center; margin-top:10px; font-size:12.5px; font-weight:700; color:var(--gold); letter-spacing:.4px; }
@@ -67,105 +55,88 @@
   .avatar-dots span{ width:5px; height:5px; border-radius:50%; background:var(--line); }
   .avatar-dots span.on{ background:var(--nebula-soft); }
   .btn{
-    margin-top:24px; width:100%; padding:13px; border-radius:9px; border:none; background:var(--nebula); color:#fff;
+    margin-top:20px; width:100%; padding:13px; border-radius:9px; border:none; background:var(--nebula); color:#fff;
     font-weight:700; font-size:14px; cursor:pointer; letter-spacing:.3px; transition:background .15s, transform .1s;
   }
-  .btn:hover{ background:var(--nebula-soft); }
-  .btn:active{ transform:scale(.98); }
-  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn:hover{ background:var(--nebula-soft); } .btn:active{ transform:scale(.98); } .btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn.secondary{ background:transparent; border:1px solid var(--line); color:var(--text-dim); }
+  .btn.danger{ background:var(--danger); }
   .hint{ font-size:11px; color:var(--text-dim); margin-top:10px; line-height:1.5; text-align:center; }
+  .errmsg{ font-size:12px; color:var(--danger); margin-top:10px; text-align:center; min-height:14px; }
 
-  .lobby-wrap{
-    width:min(640px, 94vw); max-height:88vh;
-    background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2));
-    border:2px solid var(--line); border-radius:14px; padding:30px 30px 24px; overflow:auto;
-  }
-  .lobby-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+  .lobby-wrap{ width:min(680px, 94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; padding:26px 30px 24px; overflow:auto; }
+  .lobby-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:8px;}
   .lobby-head h1{ font-size:14px; color:var(--gold); margin:0;}
   .who{ font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:8px;}
   .who b{ color:var(--text); }
   #whoAvatar{ width:16px; height:16px; border-radius:4px; display:inline-block; }
-  .section-title{ font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin:24px 0 10px; display:flex; align-items:center; gap:8px; }
+  .role-badge{ font-size:9.5px; padding:2px 7px; border-radius:20px; font-weight:700; letter-spacing:.3px; }
+  .head-actions{ display:flex; gap:8px; }
+  .head-actions button{ font-size:11px; padding:6px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg-deep); color:var(--text-dim); cursor:pointer; }
+  .head-actions button:hover{ border-color:var(--nebula-soft); color:var(--text); }
+  .section-title{ font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin:22px 0 10px; display:flex; align-items:center; gap:8px; }
   .section-title::after{ content:''; flex:1; height:1px; background:var(--line); }
   .create-row{ display:flex; gap:10px; }
   .create-row input{ flex:1; }
   .create-row .btn{ width:auto; margin-top:0; padding:0 18px; white-space:nowrap; }
+  .locked-note{ font-size:12px; color:var(--text-dim); background:var(--bg-deep); border:1px dashed var(--line); border-radius:9px; padding:12px 14px; }
   .room-list{ display:flex; flex-direction:column; gap:8px; }
-  .room-item{
-    display:flex; align-items:center; justify-content:space-between; background:var(--bg-deep); border:1px solid var(--line);
-    border-radius:9px; padding:12px 14px; cursor:pointer; transition:border-color .12s, transform .1s;
-  }
-  .room-item:hover{ border-color:var(--nebula-soft); transform:translateX(2px); }
+  .room-item{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-deep); border:1px solid var(--line); border-radius:9px; padding:12px 14px; cursor:pointer; transition:border-color .12s, transform .1s; }
+  .room-item.full{ opacity:.5; cursor:not-allowed; }
+  .room-item:not(.full):hover{ border-color:var(--nebula-soft); transform:translateX(2px); }
   .room-item .rn{ font-weight:600; font-size:14px; }
   .room-item .rm{ font-size:11px; color:var(--text-dim); margin-top:2px; }
   .room-item .go{ font-size:11px; color:var(--gold); }
+  .room-item .cap{ font-size:10.5px; color:var(--text-dim); }
   .empty{ font-size:12px; color:var(--text-dim); padding:14px 0; text-align:center; }
 
-  /* ---------- 3D ROOM ---------- */
   #room-screen{ display:none; width:100%; height:100%; position:relative; background:#7ec8e3; }
   #gl{ position:absolute; inset:0; width:100%; height:100%; display:block; outline:none; }
-  #loadingHint{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    color:#fff; font-size:13px; background:rgba(10,14,39,.4); z-index:20;
-  }
-  #topbar{
-    position:absolute; top:14px; left:18px; right:18px; display:flex; align-items:center; justify-content:space-between; z-index:5;
-  }
-  #topbar .rname{
-    background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px;
-    padding:8px 14px; font-size:12px; backdrop-filter:blur(4px); color:#fff;
-  }
+  #loadingHint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; background:rgba(10,14,39,.4); z-index:20; text-align:center; padding:20px; }
+  #topbar{ position:absolute; top:14px; left:18px; right:18px; display:flex; align-items:center; justify-content:space-between; z-index:5; }
+  #topbar .rname{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 14px; font-size:12px; backdrop-filter:blur(4px); color:#fff; }
   #topbar .rname b{ color:var(--gold); }
-  #leaveBtn{
-    background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); color:#fff;
-    border-radius:8px; padding:8px 14px; font-size:12px; cursor:pointer;
-  }
+  #topbar-right{ display:flex; gap:8px; }
+  #leaveBtn, #panelBtn{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); color:#fff; border-radius:8px; padding:8px 14px; font-size:12px; cursor:pointer; }
   #leaveBtn:hover{ border-color:var(--pink); color:var(--pink); }
-  #playerListMini{
-    position:absolute; top:60px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15);
-    border-radius:8px; padding:8px 12px; font-size:11.5px; color:#fff; max-width:170px; backdrop-filter:blur(4px);
-  }
-  #playerListMini .row{ display:flex; align-items:center; gap:6px; margin-top:4px; }
+  #panelBtn:hover{ border-color:var(--gold); color:var(--gold); }
+  #playerListMini{ position:absolute; top:60px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 12px; font-size:11.5px; color:#fff; max-width:190px; backdrop-filter:blur(4px); max-height:40vh; overflow:auto; }
+  #playerListMini .row{ display:flex; align-items:center; gap:6px; margin-top:4px; justify-content:space-between; }
+  #playerListMini .row .left{ display:flex; align-items:center; gap:6px; overflow:hidden; }
   #playerListMini .sw{ width:8px; height:8px; border-radius:2px; flex:none; }
-  #chatFeed{
-    position:absolute; bottom:70px; left:18px; z-index:5; width:min(320px, 60vw);
-    display:flex; flex-direction:column; gap:4px; pointer-events:none;
-  }
-  #chatFeed .fmsg{
-    background:rgba(10,14,39,.65); border-radius:6px; padding:5px 9px; font-size:12px; color:#fff;
-    backdrop-filter:blur(3px); animation: fadeIn .2s ease;
-  }
+  #playerListMini .rep{ background:none; border:none; color:#ff8a8a; cursor:pointer; font-size:11px; flex:none; }
+  #chatFeed{ position:absolute; bottom:70px; left:18px; z-index:5; width:min(320px, 60vw); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  #chatFeed .fmsg{ background:rgba(10,14,39,.65); border-radius:6px; padding:5px 9px; font-size:12px; color:#fff; backdrop-filter:blur(3px); animation: fadeIn .2s ease; }
   #chatFeed .fmsg b{ color:var(--gold); }
   #chatFeed .fmsg.system{ color:#cfd4ff; font-style:italic; }
-  #controlsHint{
-    position:absolute; bottom:14px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15);
-    border-radius:8px; padding:7px 12px; font-size:10.5px; color:#e6e9ff;
-  }
-  #chatInputWrap{
-    position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:10; display:none;
-    background:rgba(10,14,39,.85); border:2px solid var(--nebula-soft); border-radius:10px; padding:8px; width:min(420px, 80vw);
-  }
-  #chatInputWrap input{
-    width:100%; background:transparent; border:none; outline:none; color:#fff; font-size:14px; font-family:inherit; padding:6px 10px;
-  }
+  #controlsHint{ position:absolute; bottom:14px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:7px 12px; font-size:10.5px; color:#e6e9ff; }
+  #chatInputWrap{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:10; display:none; background:rgba(10,14,39,.85); border:2px solid var(--nebula-soft); border-radius:10px; padding:8px; width:min(420px, 80vw); }
+  #chatInputWrap input{ width:100%; background:transparent; border:none; outline:none; color:#fff; font-size:14px; font-family:inherit; padding:6px 10px; }
   #playerLabels{ position:absolute; inset:0; z-index:4; pointer-events:none; overflow:hidden; }
   .plabel{ position:absolute; transform:translate(-50%,-100%); pointer-events:none; text-align:center; white-space:nowrap; }
   .plabel .nm{ font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.8); font-weight:600; }
-  .plabel .bub{
-    background:rgba(10,14,39,.9); border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 9px;
-    font-size:12px; color:#fff; margin-bottom:4px; max-width:180px; white-space:normal;
-  }
-  #dpad{
-    position:absolute; bottom:14px; left:18px; z-index:5; width:120px; height:120px;
-    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px;
-  }
-  .dpad-btn{
-    background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.2); color:#fff; border-radius:8px;
-    font-size:14px; cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:center;
-  }
+  .plabel .bub{ background:rgba(10,14,39,.9); border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 9px; font-size:12px; color:#fff; margin-bottom:4px; max-width:180px; white-space:normal; }
+  #dpad{ position:absolute; bottom:14px; left:18px; z-index:5; width:120px; height:120px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; }
+  .dpad-btn{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.2); color:#fff; border-radius:8px; font-size:14px; cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:center; }
   .dpad-btn:active, .dpad-btn.pressed{ background:var(--nebula); border-color:var(--nebula-soft); }
-  .dp-up{ grid-column:2; grid-row:1; } .dp-left{ grid-column:1; grid-row:2; }
-  .dp-down{ grid-column:2; grid-row:3; } .dp-right{ grid-column:3; grid-row:2; }
+  .dp-up{ grid-column:2; grid-row:1; } .dp-left{ grid-column:1; grid-row:2; } .dp-down{ grid-column:2; grid-row:3; } .dp-right{ grid-column:3; grid-row:2; }
+
+  #panelModal{ display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center; }
+  #panelBox{ width:min(680px,94vw); max-height:82vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; }
+  #panelHead{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  #panelHead h2{ font-size:13px; color:var(--gold); margin:0; }
+  #panelClose{ background:none; border:none; color:var(--text-dim); font-size:20px; cursor:pointer; line-height:1; }
+  #panelTabs{ display:flex; gap:6px; padding:12px 20px 0; }
+  #panelTabs button{ padding:8px 14px; border:none; border-radius:7px 7px 0 0; background:var(--bg-deep); color:var(--text-dim); font-size:12px; cursor:pointer; }
+  #panelTabs button.active{ background:var(--nebula); color:#fff; }
+  #panelBody{ padding:16px 20px 20px; overflow:auto; flex:1; }
+  .prow{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-deep); border:1px solid var(--line); border-radius:9px; padding:10px 12px; margin-bottom:8px; }
+  .prow .info{ font-size:12.5px; }
+  .prow .info .sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+  .prow select{ background:var(--bg-panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:12px; }
+  .prow .mini-btn{ background:var(--nebula); border:none; color:#fff; border-radius:6px; padding:6px 10px; font-size:11.5px; cursor:pointer; }
+  .prow .mini-btn.ok{ background:var(--ok); }
+  .prow .mini-btn.warn{ background:var(--danger); }
 </style>
 </head>
 <body>
@@ -174,52 +145,82 @@
 
 <div id="app">
 
-  <!-- LOGIN -->
-  <div class="screen" id="login-screen">
+  <div class="screen" id="auth-screen">
     <div class="card">
       <div class="brand"><div class="dot"></div><h1 class="pixel">NÉBULA</h1></div>
-      <label for="nameInput">Seu nome</label>
-      <input type="text" id="nameInput" maxlength="16" placeholder="Como querem te chamar?">
-      <label>Escolha seu personagem</label>
-      <div class="avatar-picker">
-        <button class="arrow-btn" id="prevAvatar">&#8592;</button>
-        <div class="avatar-stage"><canvas id="avatarPreview"></canvas></div>
-        <button class="arrow-btn" id="nextAvatar">&#8594;</button>
+
+      <button class="btn secondary" id="googleBtn" type="button" style="margin-top:0;">Continuar com Google</button>
+      <div class="hint" style="margin:14px 0 4px;">ou use e-mail e senha</div>
+
+      <div class="tabs">
+        <button class="tab-btn active" id="tabRegister" type="button">Cadastrar</button>
+        <button class="tab-btn" id="tabLogin" type="button">Entrar</button>
       </div>
-      <div class="avatar-name" id="avatarName">—</div>
-      <div class="avatar-dots" id="avatarDots"></div>
-      <button class="btn" id="toLobbyBtn" disabled>Entrar na praça</button>
-      <div class="hint">Ande com WASD ou as setas. Aperte Enter pra abrir o chat. Crie sua sala ou entre numa existente.</div>
+
+      <div id="registerForm">
+        <label for="regName">Seu nome</label>
+        <input type="text" id="regName" maxlength="16" placeholder="Como querem te chamar?">
+        <div id="emailPassFields">
+          <label for="regEmail">E-mail</label>
+          <input type="email" id="regEmail" placeholder="seu@email.com">
+          <label for="regPass">Senha</label>
+          <input type="password" id="regPass" placeholder="mínimo 6 caracteres">
+        </div>
+        <label>Escolha seu personagem</label>
+        <div class="avatar-picker">
+          <button class="arrow-btn" id="prevAvatar" type="button">&#8592;</button>
+          <div class="avatar-stage"><canvas id="avatarPreview"></canvas></div>
+          <button class="arrow-btn" id="nextAvatar" type="button">&#8594;</button>
+        </div>
+        <div class="avatar-name" id="avatarName">—</div>
+        <div class="avatar-dots" id="avatarDots"></div>
+        <button class="btn" id="registerBtn">Criar conta e entrar</button>
+      </div>
+
+      <div id="loginForm" style="display:none;">
+        <label for="logEmail">E-mail</label>
+        <input type="email" id="logEmail" placeholder="seu@email.com">
+        <label for="logPass">Senha</label>
+        <input type="password" id="logPass" placeholder="sua senha">
+        <button class="btn" id="loginBtn">Entrar</button>
+      </div>
+
+      <div class="errmsg" id="authError"></div>
+      <div class="hint">Ande com WASD ou as setas. Aperte Enter pra abrir o chat.</div>
     </div>
   </div>
 
-  <!-- LOBBY -->
   <div class="screen" id="lobby-screen" style="display:none;">
     <div class="lobby-wrap">
       <div class="lobby-head">
         <h1 class="pixel">SALAS</h1>
-        <div class="who"><span id="whoAvatar"></span> oi, <b id="who-name"></b></div>
+        <div class="head-actions">
+          <button id="panelBtnLobby" style="display:none;">painel</button>
+          <button id="signOutBtn">sair da conta</button>
+        </div>
       </div>
+      <div class="who"><span id="whoAvatar"></span> oi, <b id="who-name"></b> <span class="role-badge" id="whoRole"></span></div>
+
       <div class="section-title">criar sala</div>
-      <div class="create-row">
-        <input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)">
-        <button class="btn" id="createRoomBtn">Criar e entrar</button>
-      </div>
+      <div id="createRoomZone"></div>
+
       <div class="section-title">salas abertas</div>
       <div class="room-list" id="roomList"><div class="empty">carregando…</div></div>
     </div>
   </div>
 
-  <!-- ROOM / 3D GAME -->
   <div id="room-screen">
     <canvas id="gl" tabindex="0"></canvas>
     <div id="playerLabels"></div>
     <div id="loadingHint">carregando o mundo…</div>
     <div id="topbar">
       <div class="rname">você está em <b id="currentRoomName"></b></div>
-      <button id="leaveBtn">← sair da sala</button>
+      <div id="topbar-right">
+        <button id="panelBtn" style="display:none;">painel</button>
+        <button id="leaveBtn">← sair da sala</button>
+      </div>
     </div>
-    <div id="playerListMini">quem está aqui (<span id="playerCount">0</span>)<div id="playerListRows"></div></div>
+    <div id="playerListMini">quem está aqui (<span id="playerCount">0</span>/50)<div id="playerListRows"></div></div>
     <div id="chatFeed"></div>
     <div id="controlsHint">WASD para andar · Enter para conversar</div>
     <div id="dpad">
@@ -235,7 +236,16 @@
 
 </div>
 
+<div id="panelModal">
+  <div id="panelBox">
+    <div id="panelHead"><h2>Painel da equipe</h2><button id="panelClose">×</button></div>
+    <div id="panelTabs"></div>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <script>
 const firebaseConfig = {
@@ -249,20 +259,19 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const auth = firebase.auth();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/utils/SkeletonUtils.js"></script>
 <script>
-/* ================= STARFIELD (login/lobby background) ================= */
 (function(){
   const c = document.getElementById('stars');
   const ctx = c.getContext('2d');
   let stars = [];
   function resize(){
     c.width = window.innerWidth; c.height = window.innerHeight;
-    stars = Array.from({length:140}, ()=>({
-      x:Math.random()*c.width, y:Math.random()*c.height,
-      r:Math.random()*1.4+0.2, s:Math.random()*0.5+0.15, p:Math.random()*Math.PI*2
-    }));
+    stars = Array.from({length:140}, ()=>({ x:Math.random()*c.width, y:Math.random()*c.height, r:Math.random()*1.4+0.2, s:Math.random()*0.5+0.15, p:Math.random()*Math.PI*2 }));
   }
   window.addEventListener('resize', resize); resize();
   function loop(t){
@@ -277,7 +286,35 @@ const db = firebase.database();
   requestAnimationFrame(loop);
 })();
 
-/* ================= AVATAR DEFINITIONS ================= */
+const ROLES = {
+  dev_senior:    {label:'Desenvolvedor Sênior', rank:100, color:'#ff6b6b'},
+  dev:           {label:'Desenvolvedor',        rank:90,  color:'#ff9e6b'},
+  gm:            {label:'GM',                   rank:70,  color:'#ffc857'},
+  mod_senior:    {label:'Moderador Sênior',      rank:60,  color:'#a78bfa'},
+  mod:           {label:'Moderador',             rank:50,  color:'#8b5cf6'},
+  mentor_senior: {label:'Mentor Sênior',          rank:40,  color:'#4ade80'},
+  mentor:        {label:'Mentor',                 rank:30,  color:'#38bdf8'},
+  player:        {label:'Jogador',                rank:0,   color:'#9aa3d6'}
+};
+function rankOf(role){ return (ROLES[role]||ROLES.player).rank; }
+function canCreateRoom(role){ return rankOf(role) >= ROLES.gm.rank; }
+function canSeeRolesTab(role){ return rankOf(role) >= ROLES.gm.rank; }
+function canSeeReportsTab(role){ return rankOf(role) >= ROLES.mod.rank; }
+function canSeeNewUsersTab(role){ return rankOf(role) >= ROLES.mentor.rank; }
+function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
+function assignableRoles(actorRole, targetCurrentRole){
+  if(actorRole === 'dev_senior') return Object.keys(ROLES);
+  if(actorRole === 'dev'){
+    if(rankOf(targetCurrentRole) >= ROLES.dev.rank) return [];
+    return Object.keys(ROLES).filter(r => rankOf(r) < ROLES.dev.rank);
+  }
+  if(actorRole === 'gm'){
+    if(rankOf(targetCurrentRole) >= ROLES.gm.rank) return [];
+    return Object.keys(ROLES).filter(r => rankOf(r) <= ROLES.mod_senior.rank);
+  }
+  return [];
+}
+
 const AVATARS = [
   {name:'Programador', skin:0xf0c49c, hair:0x22262f, outfit:0x2f3b63, outfit2:0x1c2544},
   {name:'Sonhadora',   skin:0xf7d3b0, hair:0xe8c15a, outfit:0xeaeaf5, outfit2:0xc9b6e8},
@@ -289,60 +326,105 @@ const AVATARS = [
   {name:'Fotógrafa',   skin:0xf0c49c, hair:0x1c1c1c, outfit:0xf97316, outfit2:0xb6520f}
 ];
 
-/* build a low-poly humanoid character with limbs that can swing for a walk cycle */
-function buildCharacter(def){
+function buildCharacterPrimitive(def){
   const g = new THREE.Group();
   const matSkin = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.85});
   const matOutfit = new THREE.MeshStandardMaterial({color:def.outfit, roughness:0.75});
   const matOutfit2 = new THREE.MeshStandardMaterial({color:def.outfit2, roughness:0.75});
   const matHair = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.6});
-
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.56,0.28), matOutfit);
-  torso.position.y = 1.02; torso.castShadow = true;
-  g.add(torso);
-
+  torso.position.y = 1.02; torso.castShadow = true; g.add(torso);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.21,14,12), matSkin);
-  head.position.y = 1.52; head.castShadow = true;
-  g.add(head);
-
+  head.position.y = 1.52; head.castShadow = true; g.add(head);
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.225,14,10,0,Math.PI*2,0,Math.PI*0.62), matHair);
-  hair.position.y = 1.59;
-  g.add(hair);
-
+  hair.position.y = 1.59; g.add(hair);
   function limb(mat, len, rad, x, y){
-    const pivot = new THREE.Group();
-    pivot.position.set(x,y,0);
+    const pivot = new THREE.Group(); pivot.position.set(x,y,0);
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad*0.82, len, 8), mat);
-    mesh.position.y = -len/2;
-    mesh.castShadow = true;
-    pivot.add(mesh);
-    g.add(pivot);
-    return pivot;
+    mesh.position.y = -len/2; mesh.castShadow = true; pivot.add(mesh); g.add(pivot); return pivot;
   }
   const armL = limb(matOutfit, 0.40, 0.062, -0.30, 1.28);
   const armR = limb(matOutfit, 0.40, 0.062,  0.30, 1.28);
   const legL = limb(matOutfit2, 0.52, 0.09, -0.12, 0.70);
   const legR = limb(matOutfit2, 0.52, 0.09,  0.12, 0.70);
-
-  g.userData = {armL, armR, legL, legR, walkPhase:0};
+  g.userData = {kind:'primitive', armL, armR, legL, legR, walkPhase:0};
   return g;
 }
-function animateWalk(group, moving, dt){
+function animatePrimitiveWalk(group, moving, dt){
   const u = group.userData;
-  if(moving){ u.walkPhase += dt*7; } else { u.walkPhase *= 0.85; }
+  if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
   const s = Math.sin(u.walkPhase) * 0.55;
   u.legL.rotation.x = s; u.legR.rotation.x = -s;
   u.armL.rotation.x = -s*0.8; u.armR.rotation.x = s*0.8;
 }
 
-/* ---- login preview: small rotating 3D character ---- */
+let realisticGLTF = null, realisticLoadFailed = false;
+function tryLoadRealisticModel(){
+  return new Promise((resolve)=>{
+    try{
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/models/gltf/Soldier.glb',
+        gltf=>{ realisticGLTF = gltf; resolve(true); },
+        undefined,
+        err=>{ console.error('modelo realista falhou, usando personagem simples:', err); realisticLoadFailed = true; resolve(false); }
+      );
+    }catch(e){ console.error(e); realisticLoadFailed = true; resolve(false); }
+  });
+}
+function buildCharacterRealistic(def){
+  const clone = THREE.SkeletonUtils.clone(realisticGLTF.scene);
+  clone.traverse(o=>{
+    if(o.isMesh){
+      o.castShadow = true; o.receiveShadow = true;
+      if(o.material){
+        o.material = o.material.clone();
+        if(o.material.color) o.material.color.lerp(new THREE.Color(def.outfit), 0.18);
+      }
+    }
+  });
+  const mixer = new THREE.AnimationMixer(clone);
+  const clips = realisticGLTF.animations || [];
+  const walkClip = THREE.AnimationClip.findByName(clips, 'Walk') || clips[1] || clips[0];
+  const idleClip = THREE.AnimationClip.findByName(clips, 'Idle') || clips[0];
+  const walkAction = walkClip ? mixer.clipAction(walkClip) : null;
+  const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
+  if(idleAction) idleAction.play();
+  clone.userData = {kind:'realistic', mixer, walkAction, idleAction, current: idleAction, moving:false};
+  return clone;
+}
+function animateRealisticWalk(group, moving){
+  const u = group.userData;
+  if(moving === u.moving) return;
+  u.moving = moving;
+  const next = moving ? u.walkAction : u.idleAction;
+  const prev = u.current;
+  if(next && next !== prev){
+    next.reset().fadeIn(0.25).play();
+    if(prev) prev.fadeOut(0.25);
+    u.current = next;
+  }
+}
+function buildCharacter(def){
+  if(realisticGLTF) return buildCharacterRealistic(def);
+  return buildCharacterPrimitive(def);
+}
+function updateCharacterAnim(group, moving, dt){
+  if(group.userData.kind === 'realistic'){
+    animateRealisticWalk(group, moving);
+    if(group.userData.mixer) group.userData.mixer.update(dt);
+  } else {
+    animatePrimitiveWalk(group, moving, dt);
+  }
+}
+
 let avatarIndex = 0;
 let previewScene, previewCamera, previewRenderer, previewChar, previewActive = true;
 function initAvatarPreview(){
   const canvas = document.getElementById('avatarPreview');
   previewScene = new THREE.Scene();
   previewCamera = new THREE.PerspectiveCamera(35, 150/170, 0.1, 20);
-  previewCamera.position.set(0, 1.25, 2.6);
+  previewCamera.position.set(0, 1.3, 2.6);
   previewCamera.lookAt(0,1.05,0);
   previewRenderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
   previewRenderer.setSize(150,170,false);
@@ -358,81 +440,212 @@ function initAvatarPreview(){
 function rebuildAvatarPreviewChar(){
   if(previewChar) previewScene.remove(previewChar);
   previewChar = buildCharacter(AVATARS[avatarIndex]);
+  if(previewChar.userData.kind === 'realistic'){ previewChar.scale.set(0.9,0.9,0.9); }
   previewScene.add(previewChar);
 }
-let previewT = 0;
+let previewT = 0, previewLastT = performance.now();
 function previewLoop(t){
+  const dt = Math.min((t-previewLastT)/1000, 0.05); previewLastT = t;
   if(previewActive){
-    previewT += 0.016;
+    previewT += dt;
     if(previewChar){
       previewChar.rotation.y = Math.sin(previewT*0.6)*0.5;
-      animateWalk(previewChar, true, 0.016);
+      updateCharacterAnim(previewChar, true, dt);
     }
     previewRenderer.render(previewScene, previewCamera);
   }
   requestAnimationFrame(previewLoop);
 }
-initAvatarPreview();
 
 function renderAvatarDots(){
   const el = document.getElementById('avatarDots');
   el.innerHTML='';
-  AVATARS.forEach((a,i)=>{
-    const d = document.createElement('span');
-    if(i===avatarIndex) d.className='on';
-    el.appendChild(d);
-  });
+  AVATARS.forEach((a,i)=>{ const d = document.createElement('span'); if(i===avatarIndex) d.className='on'; el.appendChild(d); });
 }
 function updateAvatarLabel(){
   document.getElementById('avatarName').textContent = AVATARS[avatarIndex].name;
   renderAvatarDots();
   rebuildAvatarPreviewChar();
 }
-document.getElementById('prevAvatar').addEventListener('click', ()=>{
-  avatarIndex = (avatarIndex - 1 + AVATARS.length) % AVATARS.length;
-  updateAvatarLabel();
-});
-document.getElementById('nextAvatar').addEventListener('click', ()=>{
-  avatarIndex = (avatarIndex + 1) % AVATARS.length;
-  updateAvatarLabel();
-});
-updateAvatarLabel();
+document.getElementById('prevAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel(); });
+document.getElementById('nextAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex + 1) % AVATARS.length; updateAvatarLabel(); });
 
-/* ================= IDENTITY ================= */
-let myId = null, myName = '', myAvatarIndex = 0;
-async function loadIdentity(){
+const tabRegister = document.getElementById('tabRegister');
+const tabLogin = document.getElementById('tabLogin');
+const registerForm = document.getElementById('registerForm');
+const loginForm = document.getElementById('loginForm');
+const authError = document.getElementById('authError');
+tabRegister.addEventListener('click', ()=>{
+  tabRegister.classList.add('active'); tabLogin.classList.remove('active');
+  registerForm.style.display='block'; loginForm.style.display='none'; authError.textContent='';
+});
+tabLogin.addEventListener('click', ()=>{
+  tabLogin.classList.add('active'); tabRegister.classList.remove('active');
+  loginForm.style.display='block'; registerForm.style.display='none'; authError.textContent='';
+});
+
+function friendlyAuthError(code){
+  const map = {
+    'auth/email-already-in-use':'Esse e-mail já tem conta — tenta entrar em vez de cadastrar.',
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/weak-password':'Senha muito curta (mínimo 6 caracteres).',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/user-not-found':'Não achei conta com esse e-mail.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.',
+    'auth/too-many-requests':'Muitas tentativas — espera um pouco e tenta de novo.'
+  };
+  return map[code] || 'Algo deu errado. Tenta de novo.';
+}
+
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+let completingGoogleProfile = false;
+let pendingGoogleUser = null;
+
+document.getElementById('googleBtn').addEventListener('click', async ()=>{
+  authError.textContent='';
   try{
-    const raw = localStorage.getItem('nebula_identity');
-    if(raw){
-      const d = JSON.parse(raw);
-      myId = d.id; myName = d.name || ''; myAvatarIndex = (d.avatarIndex!=null) ? d.avatarIndex : 0;
-    }
-  }catch(e){}
-  if(!myId){ myId = 'p_' + Math.random().toString(36).slice(2,10); }
-}
-async function saveIdentity(){
-  try{ localStorage.setItem('nebula_identity', JSON.stringify({id:myId,name:myName,avatarIndex:myAvatarIndex})); }catch(e){}
-}
+    await auth.signInWithPopup(googleProvider);
+    // onAuthStateChanged handles what happens next (lobby, or finish-profile step)
+  }catch(e){
+    console.error(e);
+    authError.textContent = friendlyAuthError(e.code);
+  }
+});
 
-/* ================= LOGIN SCREEN ================= */
-const nameInput = document.getElementById('nameInput');
-const toLobbyBtn = document.getElementById('toLobbyBtn');
-nameInput.addEventListener('input', ()=>{ toLobbyBtn.disabled = nameInput.value.trim().length === 0; });
-toLobbyBtn.addEventListener('click', async ()=>{
-  myName = nameInput.value.trim().slice(0,16) || 'Visitante';
-  myAvatarIndex = avatarIndex;
-  await saveIdentity();
-  previewActive = false;
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('lobby-screen').style.display='flex';
+document.getElementById('registerBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('regName').value.trim().slice(0,16);
+  authError.textContent='';
+  if(!name){ authError.textContent='Digite um nome.'; return; }
+
+  if(completingGoogleProfile){
+    try{
+      const uid = pendingGoogleUser.uid;
+      let wasFirst = false;
+      await db.ref('meta/ownerAssigned').transaction(current=>{
+        if(current === null || current === undefined){ wasFirst = true; return true; }
+        wasFirst = false; return current;
+      });
+      const role = wasFirst ? 'dev_senior' : 'player';
+      const profile = {name, email: pendingGoogleUser.email||'', avatarIndex, role, isNew: !wasFirst, createdAt: Date.now()};
+      await db.ref('users/'+uid).set(profile);
+      myId = uid; myName = name; myAvatarIndex = avatarIndex; myRole = role; myIsNew = profile.isNew;
+      completingGoogleProfile = false; pendingGoogleUser = null;
+      previewActive = false;
+      document.getElementById('auth-screen').style.display='none';
+      document.getElementById('lobby-screen').style.display='flex';
+      enterLobbyUI();
+    }catch(e){
+      console.error(e);
+      authError.textContent = 'Não consegui salvar seu perfil. Tenta de novo.';
+    }
+    return;
+  }
+
+  const email = document.getElementById('regEmail').value.trim();
+  const pass = document.getElementById('regPass').value;
+  if(!email || !pass){ authError.textContent='Preenche e-mail e senha.'; return; }
+  try{
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    const uid = cred.user.uid;
+    let wasFirst = false;
+    await db.ref('meta/ownerAssigned').transaction(current=>{
+      if(current === null || current === undefined){ wasFirst = true; return true; }
+      wasFirst = false; return current;
+    });
+    const role = wasFirst ? 'dev_senior' : 'player';
+    const profile = {name, email, avatarIndex, role, isNew: !wasFirst, createdAt: Date.now()};
+    await db.ref('users/'+uid).set(profile);
+  }catch(e){
+    console.error(e);
+    authError.textContent = friendlyAuthError(e.code);
+  }
+});
+
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('logEmail').value.trim();
+  const pass = document.getElementById('logPass').value;
+  authError.textContent='';
+  if(!email || !pass){ authError.textContent='Preenche e-mail e senha.'; return; }
+  try{
+    await auth.signInWithEmailAndPassword(email, pass);
+  }catch(e){
+    console.error(e);
+    authError.textContent = friendlyAuthError(e.code);
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
+
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myIsNew = false;
+
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    let snap;
+    try{ snap = await db.ref('users/'+user.uid).once('value'); }catch(e){ console.error(e); }
+    let profile = snap && snap.val();
+    if(!profile){
+      // no profile yet (e.g. first-time Google sign-in) — ask for name + avatar before entering
+      completingGoogleProfile = true;
+      pendingGoogleUser = user;
+      document.getElementById('regName').value = user.displayName ? user.displayName.split(' ')[0].slice(0,16) : '';
+      document.getElementById('emailPassFields').style.display = 'none';
+      document.querySelector('#auth-screen .tabs').style.display = 'none';
+      document.getElementById('googleBtn').style.display = 'none';
+      document.getElementById('registerForm').style.display = 'block';
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('registerBtn').textContent = 'Concluir cadastro';
+      document.getElementById('auth-screen').style.display = 'flex';
+      document.getElementById('lobby-screen').style.display = 'none';
+      previewActive = true;
+      return;
+    }
+    myId = user.uid;
+    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myIsNew = !!profile.isNew;
+    previewActive = false;
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('lobby-screen').style.display='flex';
+    enterLobbyUI();
+  } else {
+    myId=null; myName=''; myRole='player';
+    document.getElementById('lobby-screen').style.display='none';
+    document.getElementById('room-screen').style.display='none';
+    document.getElementById('auth-screen').style.display='flex';
+    previewActive = true;
+  }
+});
+
+function enterLobbyUI(){
   document.getElementById('who-name').textContent = myName;
   document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
-  refreshRoomList();
-});
+  const roleInfo = ROLES[myRole]||ROLES.player;
+  const badge = document.getElementById('whoRole');
+  badge.textContent = roleInfo.label;
+  badge.style.background = roleInfo.color+'33';
+  badge.style.color = roleInfo.color;
+  document.getElementById('panelBtnLobby').style.display = isStaff(myRole) ? 'inline-block' : 'none';
+  document.getElementById('panelBtn').style.display = isStaff(myRole) ? 'inline-block' : 'none';
 
-/* ================= LOBBY: ROOMS ================= */
+  const zone = document.getElementById('createRoomZone');
+  if(canCreateRoom(myRole)){
+    zone.innerHTML = `<div class="create-row"><input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)"><button class="btn" id="createRoomBtn">Criar e entrar</button></div>`;
+    document.getElementById('createRoomBtn').addEventListener('click', createRoomHandler);
+  } else {
+    zone.innerHTML = `<div class="locked-note">Criação de salas está limitada à equipe de desenvolvimento (Desenvolvedor/GM) enquanto o jogo ainda está em testes.</div>`;
+  }
+  refreshRoomList();
+}
+
+const ROOM_CAPACITY = 50;
 const roomListEl = document.getElementById('roomList');
 const DEFAULT_ROOM = {id:'praca-central', name:'Praça Central', system:true};
+
+async function countRoomPlayers(id){
+  try{
+    const snap = await db.ref('rooms/'+id+'/players').once('value');
+    const val = snap.val();
+    return val ? Object.keys(val).length : 0;
+  }catch(e){ return 0; }
+}
 async function getRoomList(){
   try{
     const snap = await db.ref('rooms').once('value');
@@ -445,22 +658,25 @@ async function getRoomList(){
 }
 async function refreshRoomList(){
   const rooms = await getRoomList();
-  renderRoomList([DEFAULT_ROOM, ...rooms]);
+  const all = [DEFAULT_ROOM, ...rooms];
+  const counts = await Promise.all(all.map(r=>countRoomPlayers(r.id)));
+  renderRoomList(all.map((r,i)=>({...r, count:counts[i]})));
 }
 function renderRoomList(rooms){
   roomListEl.innerHTML='';
   if(rooms.length===0){ roomListEl.innerHTML = '<div class="empty">nenhuma sala ainda — crie a primeira!</div>'; return; }
   rooms.forEach(room=>{
+    const full = room.count >= ROOM_CAPACITY;
     const item = document.createElement('div');
-    item.className='room-item';
+    item.className='room-item'+(full?' full':'');
     item.innerHTML = `<div><div class="rn">${escapeHtml(room.name)}</div>
       <div class="rm">${room.system ? 'sala padrão, sempre aberta' : 'criada por ' + escapeHtml(room.owner||'alguém')}</div></div>
-      <div class="go">entrar →</div>`;
-    item.onclick = ()=> enterRoom(room.id, room.name);
+      <div style="text-align:right;"><div class="cap">${room.count}/${ROOM_CAPACITY}</div><div class="go">${full?'sala cheia':'entrar →'}</div></div>`;
+    if(!full) item.onclick = ()=> enterRoom(room.id, room.name);
     roomListEl.appendChild(item);
   });
 }
-document.getElementById('createRoomBtn').addEventListener('click', async ()=>{
+async function createRoomHandler(){
   const input = document.getElementById('roomNameInput');
   const name = input.value.trim().slice(0,24);
   if(!name) return;
@@ -468,18 +684,15 @@ document.getElementById('createRoomBtn').addEventListener('click', async ()=>{
   try{ await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now()}); }catch(e){ console.error(e); }
   input.value='';
   enterRoom(id, name);
-});
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-/* ================= 3D ROOM / GAME ================= */
 let currentRoom = null;
-let scene, camera, renderer, glCanvas, clock;
+let scene, camera, renderer, glCanvas;
 let myChar, myMoving=false;
 const me = {x:0, z:6, rotY:0, targetRotY:0};
 const WORLD_RADIUS = 34;
-const remote = {}; // id -> {group, data, targetX, targetZ, targetRotY, labelEl}
+const remote = {};
 const keys = {};
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
 
@@ -487,13 +700,13 @@ function buildWorld(){
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8fd0ee);
   scene.fog = new THREE.Fog(0x9fdcf0, 20, 70);
-
   camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-
   glCanvas = document.getElementById('gl');
   renderer = new THREE.WebGLRenderer({canvas:glCanvas, antialias:true});
   renderer.shadowMap.enabled = true;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  if(THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+  if(THREE.ACESFilmicToneMapping){ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1; }
 
   const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x3a6b2f, 0.85);
   scene.add(hemi);
@@ -501,26 +714,32 @@ function buildWorld(){
   sun.position.set(18, 26, 12);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024,1024);
-  sun.shadow.camera.left=-40; sun.shadow.camera.right=40;
-  sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40;
+  sun.shadow.camera.left=-40; sun.shadow.camera.right=40; sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40;
   scene.add(sun);
 
-  // rolling ground
   const groundGeo = new THREE.PlaneGeometry(140,140,60,60);
   groundGeo.rotateX(-Math.PI/2);
   const pos = groundGeo.attributes.position;
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i), z=pos.getZ(i);
-    const h = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
-    pos.setY(i, h);
+    pos.setY(i, groundHeightAt(x,z));
   }
   groundGeo.computeVertexNormals();
-  const groundMat = new THREE.MeshStandardMaterial({color:0x4fae4a, roughness:1});
+
+  let groundMat;
+  try{
+    const texLoader = new THREE.TextureLoader();
+    const grassTex = texLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/terrain/grasslight-big.jpg');
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+    grassTex.repeat.set(26,26);
+    groundMat = new THREE.MeshStandardMaterial({map:grassTex, roughness:1});
+  }catch(e){
+    groundMat = new THREE.MeshStandardMaterial({color:0x4fae4a, roughness:1});
+  }
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // scattered flowers (small colored dots) for a touch of the meadow look
   const flowerColors = [0xffc857, 0xffffff, 0xff8fb3];
   const flowerGeo = new THREE.ConeGeometry(0.06,0.16,5);
   for(let i=0;i<160;i++){
@@ -529,39 +748,30 @@ function buildWorld(){
     const mat = new THREE.MeshStandardMaterial({color: flowerColors[i%3]});
     const fl = new THREE.Mesh(flowerGeo, mat);
     fl.position.set(x, groundHeightAt(x,z)+0.08, z);
-    fl.castShadow = false;
     scene.add(fl);
   }
 
-  // trees forming a forest border
   function makeTree(x,z,scale){
     const g = new THREE.Group();
     const trunkH = 1.6*scale;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14*scale,0.2*scale,trunkH,7), new THREE.MeshStandardMaterial({color:0x6b4a2f, roughness:1}));
-    trunk.position.y = trunkH/2; trunk.castShadow = true;
-    g.add(trunk);
+    trunk.position.y = trunkH/2; trunk.castShadow = true; g.add(trunk);
     const leafMat = new THREE.MeshStandardMaterial({color:0x2f7d3a, roughness:0.9});
     for(let i=0;i<3;i++){
       const cone = new THREE.Mesh(new THREE.ConeGeometry((1.1-i*0.18)*scale, 1.3*scale, 8), leafMat);
-      cone.position.y = trunkH + i*0.85*scale;
-      cone.castShadow = true;
-      g.add(cone);
+      cone.position.y = trunkH + i*0.85*scale; cone.castShadow = true; g.add(cone);
     }
     g.position.set(x, groundHeightAt(x,z), z);
     scene.add(g);
   }
   for(let i=0;i<46;i++){
-    const a = (i/46)*Math.PI*2 + Math.random()*0.15;
-    const r = 30 + Math.random()*10;
+    const a = (i/46)*Math.PI*2 + Math.random()*0.15, r = 30 + Math.random()*10;
     makeTree(Math.cos(a)*r, Math.sin(a)*r, 0.8+Math.random()*0.7);
   }
-  // a few inner clusters for depth (kept away from the spawn center)
   for(let i=0;i<10;i++){
     const a = Math.random()*Math.PI*2, r = 18+Math.random()*8;
     makeTree(Math.cos(a)*r, Math.sin(a)*r, 0.7+Math.random()*0.5);
   }
-
-  // bushes
   const bushMat = new THREE.MeshStandardMaterial({color:0x2f7d3a, roughness:0.95});
   for(let i=0;i<26;i++){
     const a = Math.random()*Math.PI*2, r = 6+Math.random()*26;
@@ -572,9 +782,7 @@ function buildWorld(){
     scene.add(bush);
   }
 }
-function groundHeightAt(x,z){
-  return Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
-}
+function groundHeightAt(x,z){ return Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4; }
 
 function resizeRenderer(){
   const w = window.innerWidth, h = window.innerHeight;
@@ -587,11 +795,7 @@ window.addEventListener('resize', ()=>{ if(renderer) resizeRenderer(); });
 function handleKeyDown(e){
   const chatInputEl = document.getElementById('chatInput');
   const chatOpen = document.getElementById('chatInputWrap').style.display === 'block';
-  if(!chatOpen && e.key === 'Enter' && currentRoom){
-    openChatInput();
-    e.preventDefault();
-    return;
-  }
+  if(!chatOpen && e.key === 'Enter' && currentRoom){ openChatInput(); e.preventDefault(); return; }
   if(document.activeElement === chatInputEl) return;
   const k = e.key.toLowerCase();
   keys[k] = true;
@@ -629,7 +833,6 @@ function updateMe(dt){
     const nx = me.x + dx*speed, nz = me.z + dz*speed;
     if(Math.hypot(nx,nz) < WORLD_RADIUS){ me.x = nx; me.z = nz; }
   }
-  // smooth turn toward movement direction
   let diff = me.targetRotY - me.rotY;
   while(diff > Math.PI) diff -= Math.PI*2;
   while(diff < -Math.PI) diff += Math.PI*2;
@@ -637,29 +840,18 @@ function updateMe(dt){
 
   myChar.position.set(me.x, groundHeightAt(me.x,me.z), me.z);
   myChar.rotation.y = me.rotY;
-  animateWalk(myChar, myMoving, dt);
+  updateCharacterAnim(myChar, myMoving, dt);
 
-  // third-person chase camera
   const camDist = 4.4, camHeight = 2.2;
-  const desired = new THREE.Vector3(
-    me.x - Math.sin(me.rotY)*camDist,
-    groundHeightAt(me.x,me.z) + camHeight,
-    me.z - Math.cos(me.rotY)*camDist
-  );
+  const desired = new THREE.Vector3(me.x - Math.sin(me.rotY)*camDist, groundHeightAt(me.x,me.z) + camHeight, me.z - Math.cos(me.rotY)*camDist);
   camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
-  const lookAt = new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.15, me.z);
-  camera.lookAt(lookAt);
+  camera.lookAt(new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.15, me.z));
 }
 
 function worldToScreen(vec3){
   const v = vec3.clone().project(camera);
-  return {
-    x: (v.x*0.5+0.5) * glCanvas.clientWidth,
-    y: (-v.y*0.5+0.5) * glCanvas.clientHeight,
-    behind: v.z > 1
-  };
+  return { x:(v.x*0.5+0.5) * glCanvas.clientWidth, y:(-v.y*0.5+0.5) * glCanvas.clientHeight, behind: v.z > 1 };
 }
-
 const labelsContainer = document.getElementById('playerLabels');
 const myLabelEl = document.createElement('div');
 myLabelEl.className = 'plabel';
@@ -669,18 +861,15 @@ let myBubbleText=null, myBubbleUntil=0;
 
 function updateLabels(){
   const now = Date.now();
-  // me
   const myHead = new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.9, me.z);
   const s = worldToScreen(myHead);
   if(!s.behind){
     myLabelEl.style.left = s.x+'px'; myLabelEl.style.top = s.y+'px'; myLabelEl.style.display='block';
     document.getElementById('myNm').textContent = myName;
     const bubEl = document.getElementById('myBub');
-    if(myBubbleUntil > now && myBubbleText){ bubEl.style.display='block'; bubEl.textContent = myBubbleText; }
-    else bubEl.style.display='none';
-  } else { myLabelEl.style.display='none'; }
+    if(myBubbleUntil > now && myBubbleText){ bubEl.style.display='block'; bubEl.textContent = myBubbleText; } else bubEl.style.display='none';
+  } else myLabelEl.style.display='none';
 
-  // remote players
   Object.keys(remote).forEach(id=>{
     const r = remote[id];
     const head = new THREE.Vector3(r.group.position.x, r.group.position.y+1.9, r.group.position.z);
@@ -689,8 +878,7 @@ function updateLabels(){
     r.labelEl.style.display='block';
     r.labelEl.style.left = sc.x+'px'; r.labelEl.style.top = sc.y+'px';
     const bubEl = r.labelEl.querySelector('.bub');
-    if(r.bubbleUntil > now && r.bubbleText){ bubEl.style.display='block'; bubEl.textContent = r.bubbleText; }
-    else bubEl.style.display='none';
+    if(r.bubbleUntil > now && r.bubbleText){ bubEl.style.display='block'; bubEl.textContent = r.bubbleText; } else bubEl.style.display='none';
   });
 }
 
@@ -703,19 +891,12 @@ function ensureRemoteChar(id, d){
   labelEl.className = 'plabel';
   labelEl.innerHTML = `<div class="bub" style="display:none;"></div><div class="nm">${escapeHtml(d.name||'???')}</div>`;
   labelsContainer.appendChild(labelEl);
-  remote[id] = {
-    group, targetX:d.x, targetZ:d.z, targetRotY:d.rotY||0, moving:false, labelEl,
-    bubbleText:null, bubbleUntil:0, updatedAt:Date.now(),
-    name: d.name||'???', outfitHex: def.outfit
-  };
+  remote[id] = { group, targetX:d.x, targetZ:d.z, targetRotY:d.rotY||0, moving:false, labelEl, bubbleText:null, bubbleUntil:0, updatedAt:Date.now(), name:d.name||'???', outfitHex: def.outfit };
   return remote[id];
 }
 function removeRemoteChar(id){
-  const r = remote[id];
-  if(!r) return;
-  scene.remove(r.group);
-  r.labelEl.remove();
-  delete remote[id];
+  const r = remote[id]; if(!r) return;
+  scene.remove(r.group); r.labelEl.remove(); delete remote[id];
 }
 
 let lastTime = performance.now();
@@ -724,7 +905,6 @@ function gameLoop(t){
     const dt = Math.min((t-lastTime)/1000, 0.05);
     lastTime = t;
     updateMe(dt);
-    // interpolate remote players toward their networked target position
     Object.values(remote).forEach(r=>{
       const cx = r.group.position.x, cz = r.group.position.z;
       const nx = cx + (r.targetX-cx)*Math.min(1,dt*8);
@@ -735,42 +915,23 @@ function gameLoop(t){
       while(diff < -Math.PI) diff += Math.PI*2;
       r.group.rotation.y += diff * Math.min(1, dt*10);
       r.moving = Math.hypot(r.targetX-cx, r.targetZ-cz) > 0.03;
-      animateWalk(r.group, r.moving, dt);
+      updateCharacterAnim(r.group, r.moving, dt);
     });
     updateLabels();
     renderer.render(scene, camera);
   }catch(err){ console.error('gameLoop error:', err); }
-  if(document.getElementById('room-screen').style.display !== 'none'){
-    requestAnimationFrame(gameLoop);
-  }
+  if(document.getElementById('room-screen').style.display !== 'none'){ requestAnimationFrame(gameLoop); }
 }
 
-/* ---- chat input (appears on Enter) ---- */
 const chatInputWrap = document.getElementById('chatInputWrap');
 const chatInput = document.getElementById('chatInput');
-function openChatInput(){
-  chatInputWrap.style.display = 'block';
-  chatInput.value='';
-  chatInput.focus();
-}
-function closeChatInput(){
-  chatInputWrap.style.display = 'none';
-  chatInput.blur();
-  glCanvas.focus();
-}
+function openChatInput(){ chatInputWrap.style.display = 'block'; chatInput.value=''; chatInput.focus(); }
+function closeChatInput(){ chatInputWrap.style.display = 'none'; chatInput.blur(); glCanvas.focus(); }
 chatInput.addEventListener('keydown', e=>{
   e.stopPropagation();
-  if(e.key === 'Enter'){
-    e.preventDefault();
-    const text = chatInput.value.trim().slice(0,140);
-    closeChatInput();
-    if(text) sendChatMessage(text);
-  } else if(e.key === 'Escape'){
-    e.preventDefault();
-    closeChatInput();
-  }
+  if(e.key === 'Enter'){ e.preventDefault(); const text = chatInput.value.trim().slice(0,140); closeChatInput(); if(text) sendChatMessage(text); }
+  else if(e.key === 'Escape'){ e.preventDefault(); closeChatInput(); }
 });
-
 function addFeedMsg(name, text, system){
   const feed = document.getElementById('chatFeed');
   const el = document.createElement('div');
@@ -780,29 +941,42 @@ function addFeedMsg(name, text, system){
   while(feed.children.length > 6) feed.removeChild(feed.firstChild);
   setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .6s'; setTimeout(()=>el.remove(),600); }, 8000);
 }
-
 async function sendChatMessage(text){
   const d = {id:myId, name:myName, avatarIndex:myAvatarIndex, text, ts:Date.now()};
   myBubbleText = text; myBubbleUntil = Date.now()+4500;
-  try{
-    await db.ref(`rooms/${currentRoom}/messages`).push(d);
-  }catch(err){
-    console.error('send message error:', err);
-    addFeedMsg(myName, text);
-    addFeedMsg(null, 'a mensagem apareceu só pra você — a sincronização falhou.', true);
-  }
+  try{ await db.ref(`rooms/${currentRoom}/messages`).push(d); }
+  catch(err){ console.error('send message error:', err); addFeedMsg(myName, text); addFeedMsg(null, 'a mensagem apareceu só pra você — a sincronização falhou.', true); }
 }
 
-/* ---- room lifecycle ---- */
+async function reportPlayer(id){
+  const r = remote[id];
+  if(!r) return;
+  const reason = prompt('Motivo da denúncia contra ' + r.name + ':');
+  if(!reason || !reason.trim()) return;
+  try{
+    await db.ref('reports').push({
+      reporterUid: myId, reporterName: myName, reportedUid: id, reportedName: r.name,
+      roomId: currentRoom, roomName: document.getElementById('currentRoomName').textContent,
+      reason: reason.trim().slice(0,300), ts: Date.now(), status:'pending'
+    });
+    addFeedMsg(null, 'denúncia enviada para a moderação.', true);
+  }catch(e){ console.error(e); addFeedMsg(null, 'não consegui enviar a denúncia agora.', true); }
+}
+
 let presenceRef=null, playersRef=null, messagesRef=null, heartbeatTimer=null;
 
 async function enterRoom(id, name){
+  const count = await countRoomPlayers(id);
+  if(count >= ROOM_CAPACITY){ alert('Essa sala está cheia (50/50). Tenta outra ou espera uma vaga abrir.'); return; }
+
   currentRoom = id;
   document.getElementById('lobby-screen').style.display='none';
   document.getElementById('room-screen').style.display='block';
   document.getElementById('currentRoomName').textContent = name;
   document.getElementById('loadingHint').style.display='flex';
+  document.getElementById('loadingHint').textContent = 'carregando o mundo…';
 
+  if(!realisticGLTF && !realisticLoadFailed){ await tryLoadRealisticModel(); }
   if(!scene){ buildWorld(); }
   resizeRenderer();
   if(myChar) scene.remove(myChar);
@@ -840,13 +1014,11 @@ async function enterRoom(id, name){
   messagesRef = db.ref(`rooms/${id}/messages`);
   const joinedAt = Date.now();
   messagesRef.orderByChild('ts').startAt(joinedAt).on('child_added', snap=>{
-    const d = snap.val();
-    if(!d) return;
+    const d = snap.val(); if(!d) return;
     addFeedMsg(d.name, d.text);
     if(d.id!==myId && remote[d.id]){ remote[d.id].bubbleText = d.text; remote[d.id].bubbleUntil = Date.now()+4500; }
   });
 }
-
 async function leaveRoom(){
   clearInterval(heartbeatTimer);
   try{
@@ -862,12 +1034,10 @@ async function leaveRoom(){
 }
 document.getElementById('leaveBtn').addEventListener('click', leaveRoom);
 window.addEventListener('beforeunload', ()=>{ if(presenceRef) presenceRef.remove(); });
-
 async function pushPresence(){
   if(!currentRoom || !presenceRef) return;
   try{ await presenceRef.update({x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()}); }catch(e){}
 }
-
 function updatePlayerListUI(){
   const now = Date.now();
   const active = Object.keys(remote).filter(id => now - remote[id].updatedAt < 9000);
@@ -876,26 +1046,129 @@ function updatePlayerListUI(){
   rows.innerHTML='';
   const myDef = AVATARS[myAvatarIndex] || AVATARS[0];
   const meRow = document.createElement('div'); meRow.className='row';
-  meRow.innerHTML = `<div class="sw" style="background:#${myDef.outfit.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(myName)} (você)</div>`;
+  meRow.innerHTML = `<div class="left"><div class="sw" style="background:#${myDef.outfit.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(myName)} (você)</div></div>`;
   rows.appendChild(meRow);
   active.forEach(id=>{
     const r = remote[id];
     const row = document.createElement('div'); row.className='row';
-    row.innerHTML = `<div class="sw" style="background:#${r.outfitHex.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(r.name)}</div>`;
+    row.innerHTML = `<div class="left"><div class="sw" style="background:#${r.outfitHex.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(r.name)}</div></div><button class="rep" title="denunciar">🚩</button>`;
+    row.querySelector('.rep').addEventListener('click', ()=>reportPlayer(id));
     rows.appendChild(row);
   });
 }
 
-/* ================= INIT ================= */
-(async function init(){
-  await loadIdentity();
-  if(myName){
-    nameInput.value = myName;
-    toLobbyBtn.disabled = false;
-    avatarIndex = myAvatarIndex;
-    updateAvatarLabel();
-  }
-})();
+const panelModal = document.getElementById('panelModal');
+const panelTabsEl = document.getElementById('panelTabs');
+const panelBodyEl = document.getElementById('panelBody');
+let panelCurrentTab = null;
+
+function openPanel(){
+  panelModal.style.display = 'flex';
+  const tabs = [];
+  if(canSeeRolesTab(myRole)) tabs.push({id:'roles', label:'Cargos'});
+  if(canSeeReportsTab(myRole)) tabs.push({id:'reports', label:'Denúncias'});
+  if(canSeeNewUsersTab(myRole)) tabs.push({id:'newusers', label:'Novos usuários'});
+  panelTabsEl.innerHTML='';
+  tabs.forEach((t,i)=>{
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    if(i===0){ b.classList.add('active'); panelCurrentTab = t.id; }
+    b.addEventListener('click', ()=>{
+      panelTabsEl.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active'); panelCurrentTab = t.id; renderPanelTab();
+    });
+    panelTabsEl.appendChild(b);
+  });
+  if(tabs.length===0){ panelBodyEl.innerHTML = '<div class="empty">sem permissões pra ver aqui.</div>'; return; }
+  renderPanelTab();
+}
+document.getElementById('panelBtn').addEventListener('click', openPanel);
+document.getElementById('panelBtnLobby').addEventListener('click', openPanel);
+document.getElementById('panelClose').addEventListener('click', ()=>{ panelModal.style.display='none'; });
+
+async function renderPanelTab(){
+  panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
+  if(panelCurrentTab === 'roles') return renderRolesTab();
+  if(panelCurrentTab === 'reports') return renderReportsTab();
+  if(panelCurrentTab === 'newusers') return renderNewUsersTab();
+}
+
+async function renderRolesTab(){
+  let snap;
+  try{ snap = await db.ref('users').once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar usuários.</div>'; return; }
+  const val = snap.val() || {};
+  panelBodyEl.innerHTML='';
+  Object.keys(val).forEach(uid=>{
+    const u = val[uid];
+    const options = assignableRoles(myRole, u.role);
+    const row = document.createElement('div'); row.className='prow';
+    const roleInfo = ROLES[u.role]||ROLES.player;
+    if(options.length){
+      const sel = document.createElement('select');
+      options.forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=ROLES[r].label; if(r===u.role) o.selected=true; sel.appendChild(o); });
+      const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='salvar';
+      btn.addEventListener('click', async ()=>{
+        try{ await db.ref('users/'+uid+'/role').set(sel.value); btn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+        catch(e){ console.error(e); btn.textContent='erro'; }
+      });
+      row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div>`;
+      const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center';
+      right.appendChild(sel); right.appendChild(btn);
+      row.appendChild(right);
+    } else {
+      row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
+    }
+    panelBodyEl.appendChild(row);
+  });
+  if(Object.keys(val).length===0) panelBodyEl.innerHTML = '<div class="empty">nenhum usuário cadastrado ainda.</div>';
+}
+
+async function renderReportsTab(){
+  let snap;
+  try{ snap = await db.ref('reports').orderByChild('ts').once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar denúncias.</div>'; return; }
+  const val = snap.val() || {};
+  const items = Object.keys(val).map(id=>({id, ...val[id]})).sort((a,b)=>b.ts-a.ts);
+  panelBodyEl.innerHTML='';
+  if(items.length===0){ panelBodyEl.innerHTML = '<div class="empty">nenhuma denúncia registrada.</div>'; return; }
+  items.forEach(r=>{
+    const row = document.createElement('div'); row.className='prow';
+    const when = new Date(r.ts).toLocaleString('pt-BR');
+    row.innerHTML = `<div class="info"><b>${escapeHtml(r.reportedName)}</b> denunciado por ${escapeHtml(r.reporterName)}
+      <div class="sub">${escapeHtml(r.reason)} — sala: ${escapeHtml(r.roomName||'?')} — ${when} — status: ${r.status}</div></div>`;
+    if(r.status === 'pending'){
+      const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='marcar resolvida';
+      btn.addEventListener('click', async ()=>{
+        try{ await db.ref('reports/'+r.id+'/status').set('resolved'); renderReportsTab(); }catch(e){ console.error(e); }
+      });
+      row.appendChild(btn);
+    }
+    panelBodyEl.appendChild(row);
+  });
+}
+
+async function renderNewUsersTab(){
+  let snap;
+  try{ snap = await db.ref('users').orderByChild('isNew').equalTo(true).once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar usuários novos.</div>'; return; }
+  const val = snap.val() || {};
+  panelBodyEl.innerHTML='';
+  const uids = Object.keys(val);
+  if(uids.length===0){ panelBodyEl.innerHTML = '<div class="empty">nenhum usuário novo no momento.</div>'; return; }
+  uids.forEach(uid=>{
+    const u = val[uid];
+    const row = document.createElement('div'); row.className='prow';
+    const when = new Date(u.createdAt).toLocaleString('pt-BR');
+    row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')} — cadastrado em ${when}</div></div>`;
+    const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='marcar como orientado';
+    btn.addEventListener('click', async ()=>{
+      try{ await db.ref('users/'+uid+'/isNew').set(false); renderNewUsersTab(); }catch(e){ console.error(e); }
+    });
+    row.appendChild(btn);
+    panelBodyEl.appendChild(row);
+  });
+}
+
+initAvatarPreview();
+updateAvatarLabel();
 </script>
 </body>
 </html>
