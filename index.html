@@ -1171,9 +1171,31 @@ async function reportPlayer(id){
 
 let presenceRef=null, playersRef=null, messagesRef=null, heartbeatTimer=null;
 
+async function cleanupStalePresence(targetRoomId){
+  // clear this session's own listeners/presence if it's sitting in a room already
+  clearInterval(heartbeatTimer);
+  try{
+    if(playersRef) playersRef.off();
+    if(messagesRef) messagesRef.off();
+    if(presenceRef){ await presenceRef.onDisconnect().cancel(); await presenceRef.remove(); }
+  }catch(e){ console.error('cleanup presence error', e); }
+  presenceRef=null; playersRef=null; messagesRef=null;
+
+  // also clear a stale presence left behind by another tab/session for this same account
+  try{
+    const snap = await db.ref('users/'+myId+'/activeRoom').once('value');
+    const staleRoom = snap.val();
+    if(staleRoom && staleRoom !== targetRoomId){
+      await db.ref('rooms/'+staleRoom+'/players/'+myId).remove();
+    }
+  }catch(e){ console.error('cleanup stale room error', e); }
+}
+
 async function enterRoom(id, name){
   const count = await countRoomPlayers(id);
   if(count >= ROOM_CAPACITY){ alert('Essa sala está cheia (50/50). Tenta outra ou espera uma vaga abrir.'); return; }
+
+  await cleanupStalePresence(id);
 
   currentRoom = id;
   document.getElementById('lobby-screen').style.display='none';
@@ -1201,7 +1223,12 @@ async function enterRoom(id, name){
 
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
   const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
-  try{ await presenceRef.set(initialData); presenceRef.onDisconnect().remove(); }catch(e){ console.error('presence set error', e); }
+  try{
+    await presenceRef.set(initialData);
+    presenceRef.onDisconnect().remove();
+    await db.ref('users/'+myId+'/activeRoom').set(id);
+    db.ref('users/'+myId+'/activeRoom').onDisconnect().remove();
+  }catch(e){ console.error('presence set error', e); }
   heartbeatTimer = setInterval(pushPresence, 150);
 
   playersRef = db.ref(`rooms/${id}/players`);
@@ -1231,6 +1258,7 @@ async function leaveRoom(){
     if(playersRef) playersRef.off();
     if(messagesRef) messagesRef.off();
     if(presenceRef){ await presenceRef.onDisconnect().cancel(); await presenceRef.remove(); }
+    await db.ref('users/'+myId+'/activeRoom').set(null);
   }catch(e){ console.error('leave room error', e); }
   presenceRef=null; playersRef=null; messagesRef=null;
   currentRoom = null;
