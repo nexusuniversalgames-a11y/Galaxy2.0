@@ -110,8 +110,14 @@
   #chatFeed .fmsg b{ color:var(--gold); }
   #chatFeed .fmsg.system{ color:#cfd4ff; font-style:italic; }
   #controlsHint{ position:absolute; bottom:14px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:7px 12px; font-size:10.5px; color:#e6e9ff; }
-  #chatInputWrap{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:10; display:none; background:rgba(10,14,39,.85); border:2px solid var(--nebula-soft); border-radius:10px; padding:8px; width:min(420px, 80vw); }
-  #chatInputWrap input{ width:100%; background:transparent; border:none; outline:none; color:#fff; font-size:14px; font-family:inherit; padding:6px 10px; }
+  #chatInputWrap{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:10; display:none; background:rgba(10,14,39,.85); border:2px solid var(--nebula-soft); border-radius:10px; padding:8px; width:min(420px, 80vw); gap:6px; align-items:center; }
+  #chatInputWrap input{ flex:1; background:transparent; border:none; outline:none; color:#fff; font-size:14px; font-family:inherit; padding:6px 10px; min-width:0; }
+  #chatSendBtn{ background:var(--nebula); border:none; color:#fff; border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; flex:none; }
+  #chatOpenBtn{
+    position:absolute; bottom:14px; right:150px; z-index:5; width:48px; height:48px; border-radius:50%;
+    background:var(--nebula); border:2px solid rgba(255,255,255,.25); color:#fff; font-size:20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.35);
+  }
   #playerLabels{ position:absolute; inset:0; z-index:4; pointer-events:none; overflow:hidden; }
   .plabel{ position:absolute; transform:translate(-50%,-100%); pointer-events:none; text-align:center; white-space:nowrap; }
   .plabel .nm{ font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.8); font-weight:600; }
@@ -223,6 +229,7 @@
     <div id="playerListMini">quem está aqui (<span id="playerCount">0</span>/50)<div id="playerListRows"></div></div>
     <div id="chatFeed"></div>
     <div id="controlsHint">WASD para andar · Enter para conversar</div>
+    <button type="button" id="chatOpenBtn" title="abrir chat">💬</button>
     <div id="dpad">
       <button type="button" class="dpad-btn dp-up" data-key="w">▲</button>
       <button type="button" class="dpad-btn dp-left" data-key="a">◀</button>
@@ -230,7 +237,8 @@
       <button type="button" class="dpad-btn dp-right" data-key="d">▶</button>
     </div>
     <div id="chatInputWrap">
-      <input type="text" id="chatInput" maxlength="140" placeholder="Diga algo… (Enter envia, Esc cancela)" autocomplete="off">
+      <input type="text" id="chatInput" maxlength="140" placeholder="Diga algo…" autocomplete="off">
+      <button type="button" id="chatSendBtn">Enviar</button>
     </div>
   </div>
 
@@ -1131,12 +1139,22 @@ function gameLoop(t){
 
 const chatInputWrap = document.getElementById('chatInputWrap');
 const chatInput = document.getElementById('chatInput');
-function openChatInput(){ chatInputWrap.style.display = 'block'; chatInput.value=''; chatInput.focus(); }
-function closeChatInput(){ chatInputWrap.style.display = 'none'; chatInput.blur(); glCanvas.focus(); }
+function openChatInput(){ chatInputWrap.style.display = 'flex'; chatInput.value=''; chatInput.focus(); }
+function closeChatInput(){ chatInputWrap.style.display = 'none'; chatInput.blur(); if(glCanvas) glCanvas.focus(); }
+function confirmChatInput(){
+  const text = chatInput.value.trim().slice(0,140);
+  closeChatInput();
+  if(text) sendChatMessage(text);
+}
 chatInput.addEventListener('keydown', e=>{
   e.stopPropagation();
-  if(e.key === 'Enter'){ e.preventDefault(); const text = chatInput.value.trim().slice(0,140); closeChatInput(); if(text) sendChatMessage(text); }
+  if(e.key === 'Enter'){ e.preventDefault(); confirmChatInput(); }
   else if(e.key === 'Escape'){ e.preventDefault(); closeChatInput(); }
+});
+document.getElementById('chatSendBtn').addEventListener('click', confirmChatInput);
+document.getElementById('chatOpenBtn').addEventListener('click', ()=>{
+  if(!currentRoom) return;
+  if(chatInputWrap.style.display === 'flex'){ confirmChatInput(); } else { openChatInput(); }
 });
 function addFeedMsg(name, text, system){
   const feed = document.getElementById('chatFeed');
