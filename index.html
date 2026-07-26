@@ -268,6 +268,14 @@
       </div>
       <div class="avatar-name" id="avatarName2">—</div>
       <div class="avatar-dots" id="avatarDots2"></div>
+      <div id="levelTestZone" style="display:none;">
+        <label style="margin-top:18px;">Nível / aura (teste)</label>
+        <div class="avatar-picker" style="margin-top:0;">
+          <button class="arrow-btn" id="prevLevel2" type="button">&#8592;</button>
+          <div style="flex:1; text-align:center; font-size:13px; font-weight:700; color:var(--gold);" id="levelName2">—</div>
+          <button class="arrow-btn" id="nextLevel2" type="button">&#8594;</button>
+        </div>
+      </div>
       <button class="btn" id="saveAvatarBtn">Salvar personagem</button>
       <div class="errmsg" id="avatarSaveMsg"></div>
     </div>
@@ -332,6 +340,7 @@ function canSeeRolesTab(role){ return rankOf(role) >= ROLES.gm.rank; }
 function canSeeReportsTab(role){ return rankOf(role) >= ROLES.mod.rank; }
 function canSeeNewUsersTab(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
+function canTestAura(role){ return rankOf(role) >= ROLES.dev.rank; }
 function assignableRoles(actorRole, targetCurrentRole){
   if(actorRole === 'dev_senior') return Object.keys(ROLES);
   if(actorRole === 'dev'){
@@ -591,8 +600,9 @@ function updateAvatarLabel(){
 document.getElementById('prevAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel(); });
 document.getElementById('nextAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex + 1) % AVATARS.length; updateAvatarLabel(); });
 
-// --- modal "trocar personagem" (pra quem já tem conta e quer escolher a Aura Sombria depois) ---
+// --- modal "trocar personagem" (troca o visual, e pra staff também dá pra testar o nível/aura) ---
 let avatarIndex2 = 0;
+let levelIndex2 = 0;
 let previewScene2, previewCamera2, previewRenderer2, previewChar2, preview2Active = false;
 function initAvatarPreview2(){
   const canvas = document.getElementById('avatarPreview2');
@@ -613,7 +623,7 @@ function initAvatarPreview2(){
 }
 function rebuildAvatarPreviewChar2(){
   if(previewChar2) previewScene2.remove(previewChar2);
-  previewChar2 = buildCharacter(AVATARS[avatarIndex2], myLevel);
+  previewChar2 = buildCharacter(AVATARS[avatarIndex2], levelIndex2);
   if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
   previewScene2.add(previewChar2);
 }
@@ -640,26 +650,39 @@ function updateAvatarLabel2(){
   renderAvatarDots2();
   rebuildAvatarPreviewChar2();
 }
+function updateLevelLabel2(){
+  document.getElementById('levelName2').textContent = `Nv ${levelIndex2} — ${levelInfo(levelIndex2).name}`;
+  rebuildAvatarPreviewChar2();
+}
 let avatarPreview2Inited = false;
 document.getElementById('prevAvatar2').addEventListener('click', ()=>{ avatarIndex2 = (avatarIndex2 - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel2(); });
 document.getElementById('nextAvatar2').addEventListener('click', ()=>{ avatarIndex2 = (avatarIndex2 + 1) % AVATARS.length; updateAvatarLabel2(); });
+document.getElementById('prevLevel2').addEventListener('click', ()=>{ levelIndex2 = (levelIndex2 - 1 + LEVELS.length) % LEVELS.length; updateLevelLabel2(); });
+document.getElementById('nextLevel2').addEventListener('click', ()=>{ levelIndex2 = (levelIndex2 + 1) % LEVELS.length; updateLevelLabel2(); });
 const avatarModal = document.getElementById('avatarModal');
 document.getElementById('changeAvatarBtn').addEventListener('click', ()=>{
   avatarIndex2 = myAvatarIndex;
+  levelIndex2 = myLevel;
   document.getElementById('avatarSaveMsg').textContent = '';
+  document.getElementById('levelTestZone').style.display = canTestAura(myRole) ? 'block' : 'none';
   avatarModal.style.display = 'flex';
   preview2Active = true;
   if(!avatarPreview2Inited){ avatarPreview2Inited = true; initAvatarPreview2(); }
-  else updateAvatarLabel2();
+  else { updateAvatarLabel2(); updateLevelLabel2(); }
 });
 document.getElementById('avatarModalClose').addEventListener('click', ()=>{ avatarModal.style.display='none'; preview2Active = false; });
 document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
   const msg = document.getElementById('avatarSaveMsg');
   msg.style.color = 'var(--text-dim)'; msg.textContent = 'salvando…';
   try{
-    await db.ref('users/'+myId+'/avatarIndex').set(avatarIndex2);
+    const updates = {avatarIndex: avatarIndex2};
+    if(canTestAura(myRole)) updates.level = levelIndex2;
+    await db.ref('users/'+myId).update(updates);
     myAvatarIndex = avatarIndex2;
+    if(canTestAura(myRole)) myLevel = levelIndex2;
     document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
+    const lvBadge = document.getElementById('whoLevel');
+    if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
     if(currentRoom && myChar){
       scene.remove(myChar);
       myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel);
@@ -1547,19 +1570,23 @@ async function renderRolesTab(){
   try{ snap = await db.ref('users').once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar usuários.</div>'; return; }
   const val = snap.val() || {};
   panelBodyEl.innerHTML='';
+  const canLevel = canTestAura(myRole);
   Object.keys(val).forEach(uid=>{
     const u = val[uid];
     const options = assignableRoles(myRole, u.role);
     const row = document.createElement('div'); row.className='prow';
     const roleInfo = ROLES[u.role]||ROLES.player;
 
-    const levelSel = document.createElement('select');
-    LEVELS.forEach(lv=>{ const o=document.createElement('option'); o.value=lv.level; o.textContent = `Nv ${lv.level} — ${lv.name}`; if((u.level||0)===lv.level) o.selected=true; levelSel.appendChild(o); });
-    const levelBtn = document.createElement('button'); levelBtn.className='mini-btn ok'; levelBtn.textContent='salvar nível';
-    levelBtn.addEventListener('click', async ()=>{
-      try{ await db.ref('users/'+uid+'/level').set(parseInt(levelSel.value,10)); levelBtn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
-      catch(e){ console.error(e); levelBtn.textContent='erro'; }
-    });
+    let levelSel, levelBtn;
+    if(canLevel){
+      levelSel = document.createElement('select');
+      LEVELS.forEach(lv=>{ const o=document.createElement('option'); o.value=lv.level; o.textContent = `Nv ${lv.level} — ${lv.name}`; if((u.level||0)===lv.level) o.selected=true; levelSel.appendChild(o); });
+      levelBtn = document.createElement('button'); levelBtn.className='mini-btn ok'; levelBtn.textContent='salvar nível';
+      levelBtn.addEventListener('click', async ()=>{
+        try{ await db.ref('users/'+uid+'/level').set(parseInt(levelSel.value,10)); levelBtn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+        catch(e){ console.error(e); levelBtn.textContent='erro'; }
+      });
+    }
 
     if(options.length){
       const sel = document.createElement('select');
@@ -1571,13 +1598,16 @@ async function renderRolesTab(){
       });
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div>`;
       const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
-      right.appendChild(sel); right.appendChild(btn); right.appendChild(levelSel); right.appendChild(levelBtn);
+      right.appendChild(sel); right.appendChild(btn);
+      if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
       row.appendChild(right);
     } else {
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
-      const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
-      right.appendChild(levelSel); right.appendChild(levelBtn);
-      row.appendChild(right);
+      if(canLevel){
+        const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
+        right.appendChild(levelSel); right.appendChild(levelBtn);
+        row.appendChild(right);
+      }
     }
     panelBodyEl.appendChild(row);
   });
