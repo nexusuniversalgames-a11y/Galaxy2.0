@@ -638,11 +638,23 @@ function renderVrmLibraryList(){
     el.appendChild(row);
   });
 }
+function vrmRowsToLibrary(rows){
+  const lib = {};
+  (rows||[]).forEach(r=>{ lib[r.id] = {name:r.name, url:r.url, addedBy:r.added_by, addedAt:r.added_at}; });
+  return lib;
+}
+async function loadVrmLibraryOnce(){
+  const {data, error} = await supabaseClient.from('vrm_characters').select('*');
+  if(error){ console.error('erro ao carregar lista de VRM:', error); return; }
+  vrmLibrary = vrmRowsToLibrary(data);
+  renderVrmLibraryList();
+}
 function startVrmLibraryListener(){
-  db.ref('vrmCharacters').on('value', snap=>{
-    vrmLibrary = snap.val() || {};
-    renderVrmLibraryList();
-  });
+  loadVrmLibraryOnce();
+  supabaseClient
+    .channel('vrm_characters_changes')
+    .on('postgres_changes', {event:'*', schema:'public', table:'vrm_characters'}, ()=>{ loadVrmLibraryOnce(); })
+    .subscribe();
 }
 startVrmLibraryListener();
 function uploadVRMToLibrary(file){
@@ -656,7 +668,10 @@ function uploadVRMToLibrary(file){
     .then(({error})=>{
       if(error) throw error;
       const {data} = supabaseClient.storage.from('vrm-characters').getPublicUrl(path);
-      return db.ref('vrmCharacters/'+id).set({name, url:data.publicUrl, addedBy:myId, addedAt:Date.now()});
+      return supabaseClient.from('vrm_characters').insert({id, name, url:data.publicUrl, added_by:myId, added_at:Date.now()});
+    })
+    .then(({error})=>{
+      if(error) throw error;
     })
     .then(()=>{
       msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'personagem enviado! já aparece na lista pra todo mundo escolher.';
