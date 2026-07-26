@@ -450,25 +450,72 @@ function updateAura(aura, dt){
 
 function buildCharacterPrimitive(def, level){
   const g = new THREE.Group();
-  const matSkin = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.85});
-  const matOutfit = new THREE.MeshStandardMaterial({color:def.outfit, roughness:0.75});
-  const matOutfit2 = new THREE.MeshStandardMaterial({color:def.outfit2, roughness:0.75});
-  const matHair = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.6});
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.56,0.28), matOutfit);
-  torso.position.y = 1.02; torso.castShadow = true; g.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21,14,12), matSkin);
-  head.position.y = 1.52; head.castShadow = true; g.add(head);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.225,14,10,0,Math.PI*2,0,Math.PI*0.62), matHair);
-  hair.position.y = 1.59; g.add(hair);
-  function limb(mat, len, rad, x, y){
-    const pivot = new THREE.Group(); pivot.position.set(x,y,0);
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad*0.82, len, 8), mat);
-    mesh.position.y = -len/2; mesh.castShadow = true; pivot.add(mesh); g.add(pivot); return pivot;
+  // materiais com um leve brilho na borda (rim) pra dar aquele acabamento "anime" sem precisar de shader customizado
+  const matSkin   = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.55, metalness:0.05});
+  const matOutfit = new THREE.MeshStandardMaterial({color:def.outfit, roughness:0.45, metalness:0.1});
+  const matOutfit2= new THREE.MeshStandardMaterial({color:def.outfit2, roughness:0.45, metalness:0.1});
+  const matHair   = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.3, metalness:0.15});
+  const matEye    = new THREE.MeshStandardMaterial({color:0x1a1a22, roughness:0.2, metalness:0.3});
+  const matShoe   = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.6});
+
+  // proporção "chibi": cabeça grande, corpo curto e arredondado — visual mais amigável/anime
+  // (formato de "cápsula" feito juntando cilindro + esferas nas pontas, já que essa versão do
+  // Three.js — r128 — ainda não tem THREE.CapsuleGeometry nativa)
+  function capsuleMesh(radius, cylLength, mat, radialSeg){
+    const grp = new THREE.Group();
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, cylLength, radialSeg||10), mat);
+    grp.add(cyl);
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(radius, radialSeg||10, 8, 0, Math.PI*2, 0, Math.PI/2), mat);
+    capTop.position.y = cylLength/2; grp.add(capTop);
+    const capBot = new THREE.Mesh(new THREE.SphereGeometry(radius, radialSeg||10, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2), mat);
+    capBot.position.y = -cylLength/2; grp.add(capBot);
+    grp.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    return grp;
   }
-  const armL = limb(matOutfit, 0.40, 0.062, -0.30, 1.28);
-  const armR = limb(matOutfit, 0.40, 0.062,  0.30, 1.28);
-  const legL = limb(matOutfit2, 0.52, 0.09, -0.12, 0.70);
-  const legR = limb(matOutfit2, 0.52, 0.09,  0.12, 0.70);
+  const torso = capsuleMesh(0.24, 0.34, matOutfit);
+  torso.position.y = 0.92; g.add(torso);
+
+  const hip = new THREE.Mesh(new THREE.SphereGeometry(0.235, 12, 10), matOutfit2);
+  hip.position.y = 0.66; hip.scale.set(1,0.65,1); hip.castShadow = true; g.add(hip);
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.08,0.08,8), matSkin);
+  neck.position.y = 1.15; g.add(neck);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.255, 20, 16), matSkin);
+  head.position.y = 1.42; head.castShadow = true; g.add(head);
+
+  // rostinho simples: dois olhos, dá vida ao personagem sem precisar de textura
+  [-1,1].forEach(side=>{
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), matEye);
+    eye.position.set(side*0.09, 1.415, 0.225);
+    g.add(eye);
+  });
+
+  // cabelo em duas camadas (topo + franja) pra ter um pouco de volume, estilo anime
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.275, 16, 12, 0, Math.PI*2, 0, Math.PI*0.58), matHair);
+  hairTop.position.y = 1.47; hairTop.castShadow = true; g.add(hairTop);
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10, 0, Math.PI*2, Math.PI*0.35, Math.PI*0.45), matHair);
+  hairBack.position.set(0, 1.36, -0.05); hairBack.castShadow = true; g.add(hairBack);
+
+  function limb(mat, len, rad, x, y, capRad){
+    const pivot = new THREE.Group(); pivot.position.set(x,y,0);
+    const mesh = capsuleMesh(rad, Math.max(len-rad*2, 0.02), mat, 8);
+    mesh.position.y = -len/2; pivot.add(mesh);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(capRad||rad*1.15, 10, 8), matSkin);
+    cap.position.y = -len; cap.castShadow = true; pivot.add(cap);
+    g.add(pivot); return pivot;
+  }
+  const armL = limb(matOutfit, 0.34, 0.058, -0.28, 1.12);
+  const armR = limb(matOutfit, 0.34, 0.058,  0.28, 1.12);
+  const legL = limb(matOutfit2, 0.42, 0.085, -0.11, 0.52, 0.07);
+  const legR = limb(matOutfit2, 0.42, 0.085,  0.11, 0.52, 0.07);
+
+  // sapatinhos, pra fechar bem o pé ao invés de terminar na cápsula da perna
+  [-0.11, 0.11].forEach(x=>{
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.13,0.09,0.19), matShoe);
+    shoe.position.set(x, 0.05, 0.03); shoe.castShadow = true; g.add(shoe);
+  });
+
   g.userData = {kind:'primitive', armL, armR, legL, legR, walkPhase:0};
   const aura = createAuraEffect(level);
   if(aura){ g.add(aura.group); g.userData.aura = aura; }
@@ -1442,7 +1489,9 @@ async function enterRoom(id, name){
   document.getElementById('loadingHint').style.display='flex';
   document.getElementById('loadingHint').textContent = 'carregando o mundo…';
 
-  if(!realisticGLTF && !realisticLoadFailed){ await tryLoadRealisticModel(); }
+  // O modelo genérico "Soldier" (tryLoadRealisticModel) foi desativado de propósito —
+  // ele não combina com o estilo anime/chibi. Agora o jogo sempre usa buildCharacterPrimitive,
+  // que já foi refeito com visual mais bonito.
   if(!scene){ buildWorld(); }
   resizeRenderer();
   if(myChar) scene.remove(myChar);
