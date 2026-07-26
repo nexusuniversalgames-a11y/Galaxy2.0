@@ -268,6 +268,12 @@
       </div>
       <div class="avatar-name" id="avatarName2">—</div>
       <div class="avatar-dots" id="avatarDots2"></div>
+      <div style="margin-top:18px; border-top:1px dashed var(--line); padding-top:16px;">
+        <label>Personagem VRM (criado no VRoid Studio)</label>
+        <input type="file" id="vrmFileInput" accept=".vrm" style="display:none;">
+        <button class="btn secondary" id="vrmUploadBtn" type="button" style="margin-top:8px;">Carregar arquivo .vrm</button>
+        <div class="errmsg" id="vrmLoadMsg"></div>
+      </div>
       <div id="levelTestZone" style="display:none;">
         <label style="margin-top:18px;">Nível / aura (teste)</label>
         <div class="avatar-picker" style="margin-top:0;">
@@ -302,6 +308,7 @@ const auth = firebase.auth();
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/utils/SkeletonUtils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@0.6.11/lib/three-vrm.js"></script>
 <script>
 (function(){
   const c = document.getElementById('stars');
@@ -582,13 +589,94 @@ function animateRealisticWalk(group, moving){
   }
 }
 function buildCharacter(def, level){
+  if(window.customVRM) return buildCharacterVRM(window.customVRM, level||0);
   if(realisticGLTF) return buildCharacterRealistic(def, level||0);
   return buildCharacterPrimitive(def, level||0);
 }
+
+// --- personagem VRM (VRoid Studio) — carregado do arquivo .vrm que o jogador escolhe ---
+function buildCharacterVRM(vrmInstance, level){
+  const wrapper = new THREE.Group();
+  const model = vrmInstance.scene;
+  model.rotation.y = Math.PI; // VRM olha pra -Z por padrão, giramos pra ficar igual aos outros personagens
+  model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  wrapper.add(model);
+
+  // pega os ossos dos braços/pernas pra poder animar o andar (o VRM vem parado em T-pose)
+  const Bone = (THREE_VRM.VRMSchema && THREE_VRM.VRMSchema.HumanoidBoneName) || {};
+  function bone(name){ try{ return vrmInstance.humanoid.getBoneNode(name); }catch(e){ return null; } }
+  const bones = {
+    armL: bone(Bone.LeftUpperArm || 'leftUpperArm'),
+    armR: bone(Bone.RightUpperArm || 'rightUpperArm'),
+    legL: bone(Bone.LeftUpperLeg || 'leftUpperLeg'),
+    legR: bone(Bone.RightUpperLeg || 'rightUpperLeg'),
+  };
+  // guarda a rotação original de cada osso, pra sempre animar a partir dela (e não acumular erro)
+  Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
+
+  wrapper.userData = {kind:'vrm', vrm:vrmInstance, bones, walkPhase:0};
+  const aura = createAuraEffect(level);
+  if(aura){ aura.group.position.y = 0; wrapper.add(aura.group); wrapper.userData.aura = aura; }
+  return wrapper;
+}
+function animateVRMWalk(group, moving, dt){
+  const u = group.userData;
+  if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
+  const s = Math.sin(u.walkPhase) * 0.5;
+  const {armL, armR, legL, legR} = u.bones;
+  if(armL && armL.userData._restQuat) armL.quaternion.copy(armL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s*0.7,0,0)));
+  if(armR && armR.userData._restQuat) armR.quaternion.copy(armR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s*0.7,0,0)));
+  if(legL && legL.userData._restQuat) legL.quaternion.copy(legL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s,0,0)));
+  if(legR && legR.userData._restQuat) legR.quaternion.copy(legR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s,0,0)));
+}
+
+// --- carregar o arquivo .vrm escolhido pelo jogador no computador dele ---
+function loadVRMFromFile(file){
+  const msgEl = document.getElementById('vrmLoadMsg');
+  msgEl.style.color = 'var(--text-dim)';
+  msgEl.textContent = 'carregando personagem…';
+  const url = URL.createObjectURL(file);
+  const loader = new THREE.GLTFLoader();
+  loader.load(url,
+    gltf=>{
+      THREE.VRM.from(gltf).then(vrm=>{
+        window.customVRM = vrm;
+        msgEl.style.color = 'var(--ok)';
+        msgEl.textContent = 'personagem carregado! Feche e volte pra ver na tela de troca.';
+        URL.revokeObjectURL(url);
+        // se já estiver dentro de uma sala, atualiza o personagem na hora
+        if(scene && myChar){
+          scene.remove(myChar);
+          myChar = buildCharacter(AVATARS[myAvatarIndex]||AVATARS[0], myLevel);
+          myChar.position.set(me.x, 0, me.z);
+          scene.add(myChar);
+        }
+      }).catch(err=>{
+        console.error('erro ao processar VRM:', err);
+        msgEl.style.color = 'var(--danger)';
+        msgEl.textContent = 'não consegui ler esse arquivo como VRM válido.';
+      });
+    },
+    undefined,
+    err=>{
+      console.error('erro ao carregar VRM:', err);
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'erro ao carregar o arquivo — tenta de novo?';
+    }
+  );
+}
+document.getElementById('vrmUploadBtn').addEventListener('click', ()=> document.getElementById('vrmFileInput').click());
+document.getElementById('vrmFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(file) loadVRMFromFile(file);
+});
 function updateCharacterAnim(group, moving, dt){
   if(group.userData.kind === 'realistic'){
     animateRealisticWalk(group, moving);
     if(group.userData.mixer) group.userData.mixer.update(dt);
+  } else if(group.userData.kind === 'vrm'){
+    animateVRMWalk(group, moving, dt);
+    if(group.userData.vrm && group.userData.vrm.update) group.userData.vrm.update(dt);
   } else {
     animatePrimitiveWalk(group, moving, dt);
   }
