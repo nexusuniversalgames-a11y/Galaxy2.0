@@ -269,9 +269,16 @@
       <div class="avatar-name" id="avatarName2">—</div>
       <div class="avatar-dots" id="avatarDots2"></div>
       <div style="margin-top:18px; border-top:1px dashed var(--line); padding-top:16px;">
-        <label>Personagem VRM (criado no VRoid Studio)</label>
-        <input type="file" id="vrmFileInput" accept=".vrm" style="display:none;">
-        <button class="btn secondary" id="vrmUploadBtn" type="button" style="margin-top:8px;">Carregar arquivo .vrm</button>
+        <label>Personagens VRM disponíveis</label>
+        <div id="vrmLibraryList" style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow:auto; margin-top:8px;">
+          <div class="empty" style="padding:8px 0;">carregando…</div>
+        </div>
+        <div id="vrmDevUpload" style="display:none; margin-top:12px;">
+          <label>Adicionar novo personagem VRM (só devs)</label>
+          <input type="text" id="vrmNameInput" placeholder="nome do personagem" style="margin-top:6px;">
+          <input type="file" id="vrmFileInput" accept=".vrm" style="display:none;">
+          <button class="btn secondary" id="vrmUploadBtn" type="button" style="margin-top:8px;">Escolher arquivo .vrm e enviar</button>
+        </div>
         <div class="errmsg" id="vrmLoadMsg"></div>
       </div>
       <div id="levelTestZone" style="display:none;">
@@ -305,6 +312,13 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Supabase é usado só pra guardar os arquivos .vrm (o resto do jogo continua no Firebase)
+const supabaseClient = window.supabase.createClient(
+  'https://jsviqlxzjrlhvmubxwep.supabase.co',
+  'sb_publishable_YyyANARR5-cTwVobklEnVg_6FKINrce'
+);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/utils/SkeletonUtils.js"></script>
@@ -347,6 +361,7 @@ function canSeeReportsTab(role){ return rankOf(role) >= ROLES.mod.rank; }
 function canSeeNewUsersTab(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function canTestAura(role){ return rankOf(role) >= ROLES.dev.rank; }
+function canManageVRM(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos personagens VRM pro jogo todo
 function assignableRoles(actorRole, targetCurrentRole){
   if(actorRole === 'dev_senior') return Object.keys(ROLES);
   if(actorRole === 'dev'){
@@ -587,48 +602,83 @@ function animateRealisticWalk(group, moving){
     u.current = next;
   }
 }
-function buildCharacter(def, level){
-  if(window.customVRM) return buildCharacterVRM(window.customVRM, level||0);
+function buildCharacter(def, level, vrmUrl){
+  if(vrmUrl) return buildCharacterFromVRMUrl(vrmUrl, level||0);
   if(realisticGLTF) return buildCharacterRealistic(def, level||0);
   return buildCharacterPrimitive(def, level||0);
 }
 
-// --- personagem VRM (VRoid Studio) — carregado do arquivo .vrm que o jogador escolhe ---
-// Lemos os dados do VRM (ossos, versão) direto da extensão do glTF, sem depender de
-// biblioteca externa — assim funciona tanto com VRM 1.0 (padrão atual do VRoid Studio)
-// quanto com VRM 0.x (formato antigo), sem problema de versão incompatível.
-function buildCharacterVRM(vrmData, level){
+// --- biblioteca compartilhada de personagens VRM ---
+// Só devs podem enviar (upload) novos personagens; qualquer jogador pode escolher entre os já enviados.
+let vrmLibrary = {}; // {id: {name, url}}
+let selectedVrmId2 = null; // seleção atual dentro do modal de troca de personagem
+
+function renderVrmLibraryList(){
+  const el = document.getElementById('vrmLibraryList');
+  el.innerHTML = '';
+  const noneRow = document.createElement('div');
+  noneRow.className = 'room-item'; noneRow.style.cursor = 'pointer';
+  if(!selectedVrmId2) noneRow.style.borderColor = 'var(--nebula-soft)';
+  noneRow.innerHTML = `<div class="rn">Nenhum (usar avatar padrão)</div>`;
+  noneRow.onclick = ()=>{ selectedVrmId2 = null; renderVrmLibraryList(); rebuildAvatarPreviewChar2(); };
+  el.appendChild(noneRow);
+  const ids = Object.keys(vrmLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum personagem VRM enviado ainda.';
+    el.appendChild(empty);
+  }
+  ids.forEach(id=>{
+    const item = vrmLibrary[id];
+    const row = document.createElement('div');
+    row.className = 'room-item'; row.style.cursor = 'pointer';
+    if(selectedVrmId2 === id) row.style.borderColor = 'var(--nebula-soft)';
+    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
+    row.onclick = ()=>{ selectedVrmId2 = id; renderVrmLibraryList(); rebuildAvatarPreviewChar2(); };
+    el.appendChild(row);
+  });
+}
+function startVrmLibraryListener(){
+  db.ref('vrmCharacters').on('value', snap=>{
+    vrmLibrary = snap.val() || {};
+    renderVrmLibraryList();
+  });
+}
+startVrmLibraryListener();
+function uploadVRMToLibrary(file){
+  const msgEl = document.getElementById('vrmLoadMsg');
+  const nameInput = document.getElementById('vrmNameInput');
+  const name = (nameInput.value||'').trim().slice(0,24) || file.name.replace(/\.vrm$/i,'').slice(0,24);
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'enviando personagem…';
+  const id = 'vrm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  const path = id + '.vrm';
+  supabaseClient.storage.from('vrm-characters').upload(path, file, {contentType:'model/gltf-binary'})
+    .then(({error})=>{
+      if(error) throw error;
+      const {data} = supabaseClient.storage.from('vrm-characters').getPublicUrl(path);
+      return db.ref('vrmCharacters/'+id).set({name, url:data.publicUrl, addedBy:myId, addedAt:Date.now()});
+    })
+    .then(()=>{
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'personagem enviado! já aparece na lista pra todo mundo escolher.';
+      nameInput.value = '';
+    })
+    .catch(err=>{
+      console.error('erro ao enviar VRM:', err);
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+    });
+}
+document.getElementById('vrmUploadBtn').addEventListener('click', ()=> document.getElementById('vrmFileInput').click());
+document.getElementById('vrmFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(file) uploadVRMToLibrary(file);
+});
+
+// --- construir o personagem a partir de uma URL de VRM (usado tanto pro seu quanto pros outros jogadores) ---
+function buildCharacterFromVRMUrl(url, level){
   const wrapper = new THREE.Group();
-  const model = vrmData.scene;
-  model.rotation.y = vrmData.flip ? Math.PI : 0;
-  model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
-  wrapper.add(model);
-
-  const bones = vrmData.bones || {};
-  Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
-
-  wrapper.userData = {kind:'vrm', bones, walkPhase:0};
+  wrapper.userData = {kind:'vrm', bones:{}, walkPhase:0};
   const aura = createAuraEffect(level);
   if(aura){ aura.group.position.y = 0; wrapper.add(aura.group); wrapper.userData.aura = aura; }
-  return wrapper;
-}
-function animateVRMWalk(group, moving, dt){
-  const u = group.userData;
-  if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
-  const s = Math.sin(u.walkPhase) * 0.5;
-  const {armL, armR, legL, legR} = u.bones;
-  if(armL && armL.userData._restQuat) armL.quaternion.copy(armL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s*0.7,0,0)));
-  if(armR && armR.userData._restQuat) armR.quaternion.copy(armR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s*0.7,0,0)));
-  if(legL && legL.userData._restQuat) legL.quaternion.copy(legL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s,0,0)));
-  if(legR && legR.userData._restQuat) legR.quaternion.copy(legR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s,0,0)));
-}
-
-// --- carregar o arquivo .vrm escolhido pelo jogador no computador dele ---
-function loadVRMFromFile(file){
-  const msgEl = document.getElementById('vrmLoadMsg');
-  msgEl.style.color = 'var(--text-dim)';
-  msgEl.textContent = 'carregando personagem…';
-  const url = URL.createObjectURL(file);
   const loader = new THREE.GLTFLoader();
   loader.load(url,
     gltf=>{
@@ -638,11 +688,7 @@ function loadVRMFromFile(file){
         const ext = json.extensions || {};
         const isV1 = !!ext.VRMC_vrm;
         const isV0 = !isV1 && !!ext.VRM;
-        if(!isV1 && !isV0){
-          msgEl.style.color = 'var(--danger)';
-          msgEl.textContent = 'esse arquivo não parece ter dados de VRM (humanoid) dentro.';
-          return;
-        }
+        if(!isV1 && !isV0){ console.error('arquivo VRM sem dados humanoid:', url); return; }
         const humanBones = isV1
           ? ext.VRMC_vrm.humanoid.humanBones
           : ext.VRM.humanoid.humanBones.reduce((acc,b)=>{ acc[b.bone] = {node:b.node}; return acc; }, {});
@@ -653,40 +699,33 @@ function loadVRMFromFile(file){
         }
         Promise.all([getNode('leftUpperArm'), getNode('rightUpperArm'), getNode('leftUpperLeg'), getNode('rightUpperLeg')])
           .then(([armL, armR, legL, legR])=>{
-            window.customVRM = {
-              scene: gltf.scene,
-              bones: {armL, armR, legL, legR},
-              flip: isV0 // VRM 0.x olha pra -Z (precisa girar 180°); VRM 1.0 já olha pra +Z
-            };
-            msgEl.style.color = 'var(--ok)';
-            msgEl.textContent = 'personagem carregado! Feche e volte pra ver na tela de troca.';
-            URL.revokeObjectURL(url);
-            if(scene && myChar){
-              scene.remove(myChar);
-              myChar = buildCharacter(AVATARS[myAvatarIndex]||AVATARS[0], myLevel);
-              myChar.position.set(me.x, 0, me.z);
-              scene.add(myChar);
-            }
+            const model = gltf.scene;
+            model.rotation.y = isV0 ? Math.PI : 0;
+            model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+            wrapper.add(model);
+            const bones = {armL, armR, legL, legR};
+            if(bones.armL) bones.armL.rotateZ(1.15);
+            if(bones.armR) bones.armR.rotateZ(-1.15);
+            Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
+            wrapper.userData.bones = bones;
           });
-      }catch(err){
-        console.error('erro ao processar VRM:', err);
-        msgEl.style.color = 'var(--danger)';
-        msgEl.textContent = 'não consegui ler os dados desse VRM (veja o Console/F12 pra detalhes).';
-      }
+      }catch(err){ console.error('erro ao processar VRM remoto:', err); }
     },
     undefined,
-    err=>{
-      console.error('erro ao carregar VRM:', err);
-      msgEl.style.color = 'var(--danger)';
-      msgEl.textContent = 'erro ao carregar o arquivo — tenta de novo?';
-    }
+    err=>console.error('erro ao carregar VRM de', url, err)
   );
+  return wrapper;
 }
-document.getElementById('vrmUploadBtn').addEventListener('click', ()=> document.getElementById('vrmFileInput').click());
-document.getElementById('vrmFileInput').addEventListener('change', e=>{
-  const file = e.target.files[0];
-  if(file) loadVRMFromFile(file);
-});
+function animateVRMWalk(group, moving, dt){
+  const u = group.userData;
+  if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
+  const s = Math.sin(u.walkPhase) * 0.5;
+  const {armL, armR, legL, legR} = u.bones;
+  if(armL && armL.userData._restQuat) armL.quaternion.copy(armL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s*0.9,0,0)));
+  if(armR && armR.userData._restQuat) armR.quaternion.copy(armR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s*0.9,0,0)));
+  if(legL && legL.userData._restQuat) legL.quaternion.copy(legL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s,0,0)));
+  if(legR && legR.userData._restQuat) legR.quaternion.copy(legR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s,0,0)));
+}
 function updateCharacterAnim(group, moving, dt){
   if(group.userData.kind === 'realistic'){
     animateRealisticWalk(group, moving);
@@ -774,7 +813,8 @@ function initAvatarPreview2(){
 }
 function rebuildAvatarPreviewChar2(){
   if(previewChar2) previewScene2.remove(previewChar2);
-  previewChar2 = buildCharacter(AVATARS[avatarIndex2], levelIndex2);
+  const vrmUrl = selectedVrmId2 ? (vrmLibrary[selectedVrmId2]||{}).url : null;
+  previewChar2 = buildCharacter(AVATARS[avatarIndex2], levelIndex2, vrmUrl);
   if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
   previewScene2.add(previewChar2);
 }
@@ -814,10 +854,14 @@ const avatarModal = document.getElementById('avatarModal');
 document.getElementById('changeAvatarBtn').addEventListener('click', ()=>{
   avatarIndex2 = myAvatarIndex;
   levelIndex2 = myLevel;
+  selectedVrmId2 = myVrmId || null;
   document.getElementById('avatarSaveMsg').textContent = '';
+  document.getElementById('vrmLoadMsg').textContent = '';
   document.getElementById('levelTestZone').style.display = canTestAura(myRole) ? 'block' : 'none';
+  document.getElementById('vrmDevUpload').style.display = canManageVRM(myRole) ? 'block' : 'none';
   avatarModal.style.display = 'flex';
   preview2Active = true;
+  renderVrmLibraryList();
   if(!avatarPreview2Inited){ avatarPreview2Inited = true; initAvatarPreview2(); }
   else { updateAvatarLabel2(); updateLevelLabel2(); }
 });
@@ -826,18 +870,22 @@ document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
   const msg = document.getElementById('avatarSaveMsg');
   msg.style.color = 'var(--text-dim)'; msg.textContent = 'salvando…';
   try{
-    const updates = {avatarIndex: avatarIndex2};
+    const updates = {avatarIndex: avatarIndex2, vrmId: selectedVrmId2 || null};
     if(canTestAura(myRole)) updates.level = levelIndex2;
     await db.ref('users/'+myId).update(updates);
     myAvatarIndex = avatarIndex2;
+    myVrmId = selectedVrmId2 || null;
     if(canTestAura(myRole)) myLevel = levelIndex2;
     document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
     const lvBadge = document.getElementById('whoLevel');
     if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
     if(currentRoom && myChar){
       scene.remove(myChar);
-      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel);
+      const vrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
+      myChar.position.set(me.x, 0, me.z);
       scene.add(myChar);
+      if(presenceRef) presenceRef.update({vrmId: myVrmId}).catch(()=>{});
     }
     msg.style.color = 'var(--ok)'; msg.textContent = 'personagem salvo!';
     setTimeout(()=>{ avatarModal.style.display='none'; preview2Active = false; }, 700);
@@ -953,7 +1001,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 
 document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
 
-let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false;
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null;
 
 auth.onAuthStateChanged(async (user)=>{
   if(user){
@@ -977,7 +1025,7 @@ auth.onAuthStateChanged(async (user)=>{
       return;
     }
     myId = user.uid;
-    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew;
+    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
@@ -1466,7 +1514,8 @@ function updateLabels(){
 function ensureRemoteChar(id, d){
   if(remote[id]) return remote[id];
   const def = AVATARS[d.avatarIndex] || AVATARS[0];
-  const group = buildCharacter(def, d.level||0);
+  const vrmUrl = d.vrmId ? (vrmLibrary[d.vrmId]||{}).url : null;
+  const group = buildCharacter(def, d.level||0, vrmUrl);
   scene.add(group);
   const labelEl = document.createElement('div');
   labelEl.className = 'plabel';
@@ -1599,7 +1648,8 @@ async function enterRoom(id, name){
   if(!scene){ buildWorld(); }
   resizeRenderer();
   if(myChar) scene.remove(myChar);
-  myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel);
+  const myVrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
+  myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, myVrmUrl);
   scene.add(myChar);
 
   me.x = (Math.random()*10-5); me.z = 6 + Math.random()*6; me.rotY = 0; me.targetRotY = 0;
@@ -1613,7 +1663,7 @@ async function enterRoom(id, name){
   setTimeout(()=>glCanvas.focus(), 60);
 
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
-  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
   try{
     await presenceRef.set(initialData);
     presenceRef.onDisconnect().remove();
