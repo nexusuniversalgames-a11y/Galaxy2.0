@@ -308,7 +308,6 @@ const auth = firebase.auth();
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/utils/SkeletonUtils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@0.6.11/lib/three-vrm.js"></script>
 <script>
 (function(){
   const c = document.getElementById('stars');
@@ -595,26 +594,20 @@ function buildCharacter(def, level){
 }
 
 // --- personagem VRM (VRoid Studio) — carregado do arquivo .vrm que o jogador escolhe ---
-function buildCharacterVRM(vrmInstance, level){
+// Lemos os dados do VRM (ossos, versão) direto da extensão do glTF, sem depender de
+// biblioteca externa — assim funciona tanto com VRM 1.0 (padrão atual do VRoid Studio)
+// quanto com VRM 0.x (formato antigo), sem problema de versão incompatível.
+function buildCharacterVRM(vrmData, level){
   const wrapper = new THREE.Group();
-  const model = vrmInstance.scene;
-  model.rotation.y = Math.PI; // VRM olha pra -Z por padrão, giramos pra ficar igual aos outros personagens
+  const model = vrmData.scene;
+  model.rotation.y = vrmData.flip ? Math.PI : 0;
   model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
   wrapper.add(model);
 
-  // pega os ossos dos braços/pernas pra poder animar o andar (o VRM vem parado em T-pose)
-  const Bone = (THREE_VRM.VRMSchema && THREE_VRM.VRMSchema.HumanoidBoneName) || {};
-  function bone(name){ try{ return vrmInstance.humanoid.getBoneNode(name); }catch(e){ return null; } }
-  const bones = {
-    armL: bone(Bone.LeftUpperArm || 'leftUpperArm'),
-    armR: bone(Bone.RightUpperArm || 'rightUpperArm'),
-    legL: bone(Bone.LeftUpperLeg || 'leftUpperLeg'),
-    legR: bone(Bone.RightUpperLeg || 'rightUpperLeg'),
-  };
-  // guarda a rotação original de cada osso, pra sempre animar a partir dela (e não acumular erro)
+  const bones = vrmData.bones || {};
   Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
 
-  wrapper.userData = {kind:'vrm', vrm:vrmInstance, bones, walkPhase:0};
+  wrapper.userData = {kind:'vrm', bones, walkPhase:0};
   const aura = createAuraEffect(level);
   if(aura){ aura.group.position.y = 0; wrapper.add(aura.group); wrapper.userData.aura = aura; }
   return wrapper;
@@ -639,23 +632,47 @@ function loadVRMFromFile(file){
   const loader = new THREE.GLTFLoader();
   loader.load(url,
     gltf=>{
-      THREE.VRM.from(gltf).then(vrm=>{
-        window.customVRM = vrm;
-        msgEl.style.color = 'var(--ok)';
-        msgEl.textContent = 'personagem carregado! Feche e volte pra ver na tela de troca.';
-        URL.revokeObjectURL(url);
-        // se já estiver dentro de uma sala, atualiza o personagem na hora
-        if(scene && myChar){
-          scene.remove(myChar);
-          myChar = buildCharacter(AVATARS[myAvatarIndex]||AVATARS[0], myLevel);
-          myChar.position.set(me.x, 0, me.z);
-          scene.add(myChar);
+      try{
+        const parser = gltf.parser;
+        const json = parser.json;
+        const ext = json.extensions || {};
+        const isV1 = !!ext.VRMC_vrm;
+        const isV0 = !isV1 && !!ext.VRM;
+        if(!isV1 && !isV0){
+          msgEl.style.color = 'var(--danger)';
+          msgEl.textContent = 'esse arquivo não parece ter dados de VRM (humanoid) dentro.';
+          return;
         }
-      }).catch(err=>{
+        const humanBones = isV1
+          ? ext.VRMC_vrm.humanoid.humanBones
+          : ext.VRM.humanoid.humanBones.reduce((acc,b)=>{ acc[b.bone] = {node:b.node}; return acc; }, {});
+        function getNode(name){
+          const entry = humanBones[name];
+          if(!entry) return Promise.resolve(null);
+          return parser.getDependency('node', entry.node);
+        }
+        Promise.all([getNode('leftUpperArm'), getNode('rightUpperArm'), getNode('leftUpperLeg'), getNode('rightUpperLeg')])
+          .then(([armL, armR, legL, legR])=>{
+            window.customVRM = {
+              scene: gltf.scene,
+              bones: {armL, armR, legL, legR},
+              flip: isV0 // VRM 0.x olha pra -Z (precisa girar 180°); VRM 1.0 já olha pra +Z
+            };
+            msgEl.style.color = 'var(--ok)';
+            msgEl.textContent = 'personagem carregado! Feche e volte pra ver na tela de troca.';
+            URL.revokeObjectURL(url);
+            if(scene && myChar){
+              scene.remove(myChar);
+              myChar = buildCharacter(AVATARS[myAvatarIndex]||AVATARS[0], myLevel);
+              myChar.position.set(me.x, 0, me.z);
+              scene.add(myChar);
+            }
+          });
+      }catch(err){
         console.error('erro ao processar VRM:', err);
         msgEl.style.color = 'var(--danger)';
-        msgEl.textContent = 'não consegui ler esse arquivo como VRM válido.';
-      });
+        msgEl.textContent = 'não consegui ler os dados desse VRM (veja o Console/F12 pra detalhes).';
+      }
     },
     undefined,
     err=>{
@@ -676,7 +693,6 @@ function updateCharacterAnim(group, moving, dt){
     if(group.userData.mixer) group.userData.mixer.update(dt);
   } else if(group.userData.kind === 'vrm'){
     animateVRMWalk(group, moving, dt);
-    if(group.userData.vrm && group.userData.vrm.update) group.userData.vrm.update(dt);
   } else {
     animatePrimitiveWalk(group, moving, dt);
   }
