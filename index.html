@@ -713,13 +713,13 @@ function buildCharacterFromVRMUrl(url, level){
           if(!entry) return Promise.resolve(null);
           return parser.getDependency('node', entry.node);
         }
-        Promise.all([getNode('leftUpperArm'), getNode('rightUpperArm'), getNode('leftUpperLeg'), getNode('rightUpperLeg')])
-          .then(([armL, armR, legL, legR])=>{
+        Promise.all([getNode('leftUpperArm'), getNode('rightUpperArm'), getNode('leftUpperLeg'), getNode('rightUpperLeg'), getNode('leftLowerLeg'), getNode('rightLowerLeg')])
+          .then(([armL, armR, legL, legR, kneeL, kneeR])=>{
             const model = gltf.scene;
             model.rotation.y = isV0 ? Math.PI : 0;
             model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
             wrapper.add(model);
-            const bones = {armL, armR, legL, legR};
+            const bones = {armL, armR, legL, legR, kneeL, kneeR};
             if(bones.armL) bones.armL.rotateZ(1.15);
             if(bones.armR) bones.armR.rotateZ(-1.15);
             Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
@@ -735,12 +735,16 @@ function buildCharacterFromVRMUrl(url, level){
 function animateVRMWalk(group, moving, dt){
   const u = group.userData;
   if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
-  const s = Math.sin(u.walkPhase) * 0.5;
-  const {armL, armR, legL, legR} = u.bones;
+  const s = Math.sin(u.walkPhase) * 0.45;
+  const kneeBendL = Math.max(0, Math.sin(u.walkPhase)) * 0.9;
+  const kneeBendR = Math.max(0, -Math.sin(u.walkPhase)) * 0.9;
+  const {armL, armR, legL, legR, kneeL, kneeR} = u.bones;
   if(armL && armL.userData._restQuat) armL.quaternion.copy(armL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s*0.9,0,0)));
   if(armR && armR.userData._restQuat) armR.quaternion.copy(armR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s*0.9,0,0)));
   if(legL && legL.userData._restQuat) legL.quaternion.copy(legL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s,0,0)));
   if(legR && legR.userData._restQuat) legR.quaternion.copy(legR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s,0,0)));
+  if(kneeL && kneeL.userData._restQuat) kneeL.quaternion.copy(kneeL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-kneeBendL,0,0)));
+  if(kneeR && kneeR.userData._restQuat) kneeR.quaternion.copy(kneeR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-kneeBendR,0,0)));
 }
 function updateCharacterAnim(group, moving, dt){
   if(group.userData.kind === 'realistic'){
