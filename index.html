@@ -331,8 +331,66 @@ const AVATARS = [
   {name:'Viajante',    skin:0xc98857, hair:0x101010, outfit:0xffc857, outfit2:0xc99a2f},
   {name:'Artista',     skin:0xf7d3b0, hair:0xb23b5a, outfit:0x38bdf8, outfit2:0x1f7fae},
   {name:'Ciclista',    skin:0xe0aa78, hair:0x4a3323, outfit:0x4ade80, outfit2:0x2f9e5c},
-  {name:'Fotógrafa',   skin:0xf0c49c, hair:0x1c1c1c, outfit:0xf97316, outfit2:0xb6520f}
+  {name:'Fotógrafa',   skin:0xf0c49c, hair:0x1c1c1c, outfit:0xf97316, outfit2:0xb6520f},
+  {name:'Aura Sombria', skin:0xe8b98a, hair:0x0c0c0f, outfit:0x121218, outfit2:0x0a0a10, aura:true}
 ];
+
+// --- efeito de aura (chamas roxo/preto ao redor do personagem) ---
+let _auraTexture = null;
+function getAuraTexture(){
+  if(_auraTexture) return _auraTexture;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createRadialGradient(32,32,0,32,32,32);
+  grad.addColorStop(0,    'rgba(214,190,255,0.95)');
+  grad.addColorStop(0.32, 'rgba(139,92,246,0.75)');
+  grad.addColorStop(0.65, 'rgba(45,12,70,0.45)');
+  grad.addColorStop(1,    'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,64,64);
+  _auraTexture = new THREE.CanvasTexture(c);
+  return _auraTexture;
+}
+function createAuraEffect(){
+  const group = new THREE.Group();
+  const tex = getAuraTexture();
+  const particles = [];
+  const count = 18;
+  for(let i=0;i<count;i++){
+    const mat = new THREE.SpriteMaterial({map:tex, color:0xffffff, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false});
+    const sp = new THREE.Sprite(mat);
+    const baseScale = 0.16 + Math.random()*0.22;
+    sp.scale.set(baseScale, baseScale*1.5, 1);
+    sp.userData = {
+      angle: Math.random()*Math.PI*2,
+      radius: 0.22 + Math.random()*0.16,
+      spin: 0.4 + Math.random()*0.6,
+      riseSpeed: 0.32 + Math.random()*0.45,
+      y: Math.random()*1.7,
+      baseScale,
+      flicker: Math.random()*Math.PI*2
+    };
+    group.add(sp);
+    particles.push(sp);
+  }
+  return {group, particles, t:0};
+}
+function updateAura(aura, dt){
+  if(!aura) return;
+  aura.t += dt;
+  aura.particles.forEach(sp=>{
+    const u = sp.userData;
+    u.y += u.riseSpeed*dt;
+    if(u.y > 1.75){ u.y = 0; u.angle = Math.random()*Math.PI*2; }
+    u.angle += u.spin*dt;
+    const wobble = Math.sin(aura.t*3 + u.flicker)*0.03;
+    sp.position.set(Math.cos(u.angle)*(u.radius+wobble), u.y, Math.sin(u.angle)*(u.radius+wobble));
+    const fade = 1 - (u.y/1.75);
+    sp.material.opacity = Math.max(0, fade*0.9);
+    const flick = 0.85 + Math.sin(aura.t*8 + u.flicker)*0.15;
+    sp.scale.set(u.baseScale*flick, u.baseScale*1.5*flick, 1);
+  });
+}
 
 function buildCharacterPrimitive(def){
   const g = new THREE.Group();
@@ -356,6 +414,7 @@ function buildCharacterPrimitive(def){
   const legL = limb(matOutfit2, 0.52, 0.09, -0.12, 0.70);
   const legR = limb(matOutfit2, 0.52, 0.09,  0.12, 0.70);
   g.userData = {kind:'primitive', armL, armR, legL, legR, walkPhase:0};
+  if(def.aura){ const aura = createAuraEffect(); g.add(aura.group); g.userData.aura = aura; }
   return g;
 }
 function animatePrimitiveWalk(group, moving, dt){
@@ -402,6 +461,7 @@ function buildCharacterRealistic(def){
   const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
   if(idleAction) idleAction.play();
   wrapper.userData = {kind:'realistic', mixer, walkAction, idleAction, current: idleAction, moving:false};
+  if(def.aura){ const aura = createAuraEffect(); wrapper.add(aura.group); wrapper.userData.aura = aura; }
   return wrapper;
 }
 function animateRealisticWalk(group, moving){
@@ -427,6 +487,7 @@ function updateCharacterAnim(group, moving, dt){
   } else {
     animatePrimitiveWalk(group, moving, dt);
   }
+  if(group.userData.aura) updateAura(group.userData.aura, dt);
 }
 
 let avatarIndex = 0;
