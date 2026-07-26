@@ -210,7 +210,7 @@
           <button id="signOutBtn">sair da conta</button>
         </div>
       </div>
-      <div class="who"><span id="whoAvatar"></span> oi, <b id="who-name"></b> <span class="role-badge" id="whoRole"></span></div>
+      <div class="who"><span id="whoAvatar"></span> oi, <b id="who-name"></b> <span class="role-badge" id="whoRole"></span> <span class="role-badge" id="whoLevel" style="background:#8b5cf633;color:var(--nebula-soft);"></span></div>
 
       <div class="section-title">criar sala</div>
       <div id="createRoomZone"></div>
@@ -354,28 +354,51 @@ const AVATARS = [
   {name:'Artista',     skin:0xf7d3b0, hair:0xb23b5a, outfit:0x38bdf8, outfit2:0x1f7fae},
   {name:'Ciclista',    skin:0xe0aa78, hair:0x4a3323, outfit:0x4ade80, outfit2:0x2f9e5c},
   {name:'Fotógrafa',   skin:0xf0c49c, hair:0x1c1c1c, outfit:0xf97316, outfit2:0xb6520f},
-  {name:'Aura Sombria', skin:0xe8b98a, hair:0x0c0c0f, outfit:0x121218, outfit2:0x0a0a10, aura:true}
+  {name:'Terno escuro', skin:0xe8b98a, hair:0x0c0c0f, outfit:0x121218, outfit2:0x0a0a10}
 ];
 
-// --- efeito de aura (chamas roxo/preto ao redor do personagem) ---
-let _auraTexture = null;
-function getAuraTexture(){
-  if(_auraTexture) return _auraTexture;
+// --- sistema de níveis: cada nível tem sua própria cor/estilo de aura ao redor do personagem ---
+// (os critérios pra subir de nível ainda vão ser definidos — por enquanto o nível fica salvo em users/{uid}/level)
+const LEVELS = [
+  {level:0,  name:'Novato',        colors:null},
+  {level:1,  name:'Aprendiz',      colors:{inner:'rgba(255,255,255,0.95)', mid:'rgba(200,205,215,0.6)',  outer:'rgba(110,115,130,0.35)'}}, // branco/prata
+  {level:2,  name:'Explorador',    colors:{inner:'rgba(190,235,255,0.95)', mid:'rgba(56,189,248,0.65)',  outer:'rgba(10,60,95,0.4)'}},     // azul claro
+  {level:3,  name:'Guardião',      colors:{inner:'rgba(210,255,220,0.95)', mid:'rgba(74,222,128,0.65)',  outer:'rgba(8,60,25,0.4)'}},      // verde
+  {level:4,  name:'Veterano',      colors:{inner:'rgba(255,247,190,0.95)', mid:'rgba(255,200,60,0.7)',   outer:'rgba(90,60,0,0.4)'}},      // amarelo/dourado
+  {level:5,  name:'Elite',         colors:{inner:'rgba(255,220,180,0.95)', mid:'rgba(255,130,40,0.72)',  outer:'rgba(95,30,0,0.42)'}},     // laranja/fogo
+  {level:6,  name:'Campeão',       colors:{inner:'rgba(255,200,200,0.95)', mid:'rgba(240,60,60,0.72)',   outer:'rgba(70,0,0,0.42)'}},      // vermelho
+  {level:7,  name:'Mestre',        colors:{inner:'rgba(255,210,240,0.95)', mid:'rgba(236,72,153,0.72)',  outer:'rgba(80,0,50,0.42)'}},     // rosa/magenta
+  {level:8,  name:'Lenda',         colors:{inner:'rgba(230,210,255,0.95)', mid:'rgba(168,85,247,0.72)',  outer:'rgba(50,0,80,0.42)'}},     // roxo
+  {level:9,  name:'Mítico',        colors:{inner:'rgba(214,190,255,0.95)', mid:'rgba(139,92,246,0.75)',  outer:'rgba(20,5,35,0.5)'}},      // roxo escuro/preto
+  {level:10, name:'Supremo',       colors:'rainbow'}                                                                                        // arco-íris
+];
+function levelInfo(level){ return LEVELS[Math.max(0, Math.min(level|0, LEVELS.length-1))]; }
+
+// --- efeito de aura (partículas coloridas subindo ao redor do personagem, cor varia por nível) ---
+const _auraTextureCache = {};
+function getAuraTexture(key, colors){
+  if(_auraTextureCache[key]) return _auraTextureCache[key];
   const c = document.createElement('canvas'); c.width = 64; c.height = 64;
   const ctx = c.getContext('2d');
   const grad = ctx.createRadialGradient(32,32,0,32,32,32);
-  grad.addColorStop(0,    'rgba(214,190,255,0.95)');
-  grad.addColorStop(0.32, 'rgba(139,92,246,0.75)');
-  grad.addColorStop(0.65, 'rgba(45,12,70,0.45)');
+  grad.addColorStop(0,    colors.inner);
+  grad.addColorStop(0.32, colors.mid);
+  grad.addColorStop(0.65, colors.outer);
   grad.addColorStop(1,    'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,64,64);
-  _auraTexture = new THREE.CanvasTexture(c);
-  return _auraTexture;
+  const tex = new THREE.CanvasTexture(c);
+  _auraTextureCache[key] = tex;
+  return tex;
 }
-function createAuraEffect(){
+function createAuraEffect(level){
+  const conf = levelInfo(level);
+  if(!conf.colors) return null;
+  const isRainbow = conf.colors === 'rainbow';
+  const tex = isRainbow
+    ? getAuraTexture('rainbow', {inner:'rgba(255,255,255,0.95)', mid:'rgba(255,255,255,0.65)', outer:'rgba(255,255,255,0.35)'})
+    : getAuraTexture('lvl'+conf.level, conf.colors);
   const group = new THREE.Group();
-  const tex = getAuraTexture();
   const particles = [];
   const count = 18;
   for(let i=0;i<count;i++){
@@ -390,12 +413,13 @@ function createAuraEffect(){
       riseSpeed: 0.32 + Math.random()*0.45,
       y: Math.random()*1.7,
       baseScale,
-      flicker: Math.random()*Math.PI*2
+      flicker: Math.random()*Math.PI*2,
+      hueOffset: Math.random()
     };
     group.add(sp);
     particles.push(sp);
   }
-  return {group, particles, t:0};
+  return {group, particles, t:0, rainbow:isRainbow};
 }
 function updateAura(aura, dt){
   if(!aura) return;
@@ -411,10 +435,11 @@ function updateAura(aura, dt){
     sp.material.opacity = Math.max(0, fade*0.9);
     const flick = 0.85 + Math.sin(aura.t*8 + u.flicker)*0.15;
     sp.scale.set(u.baseScale*flick, u.baseScale*1.5*flick, 1);
+    if(aura.rainbow){ sp.material.color.setHSL((aura.t*0.15 + u.hueOffset) % 1, 0.85, 0.62); }
   });
 }
 
-function buildCharacterPrimitive(def){
+function buildCharacterPrimitive(def, level){
   const g = new THREE.Group();
   const matSkin = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.85});
   const matOutfit = new THREE.MeshStandardMaterial({color:def.outfit, roughness:0.75});
@@ -436,7 +461,8 @@ function buildCharacterPrimitive(def){
   const legL = limb(matOutfit2, 0.52, 0.09, -0.12, 0.70);
   const legR = limb(matOutfit2, 0.52, 0.09,  0.12, 0.70);
   g.userData = {kind:'primitive', armL, armR, legL, legR, walkPhase:0};
-  if(def.aura){ const aura = createAuraEffect(); g.add(aura.group); g.userData.aura = aura; }
+  const aura = createAuraEffect(level);
+  if(aura){ g.add(aura.group); g.userData.aura = aura; }
   return g;
 }
 function animatePrimitiveWalk(group, moving, dt){
@@ -461,7 +487,7 @@ function tryLoadRealisticModel(){
     }catch(e){ console.error(e); realisticLoadFailed = true; resolve(false); }
   });
 }
-function buildCharacterRealistic(def){
+function buildCharacterRealistic(def, level){
   const wrapper = new THREE.Group();
   const clone = THREE.SkeletonUtils.clone(realisticGLTF.scene);
   clone.rotation.y = Math.PI; // the model's own "front" faces the opposite way we need — flip it
@@ -483,7 +509,8 @@ function buildCharacterRealistic(def){
   const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
   if(idleAction) idleAction.play();
   wrapper.userData = {kind:'realistic', mixer, walkAction, idleAction, current: idleAction, moving:false};
-  if(def.aura){ const aura = createAuraEffect(); wrapper.add(aura.group); wrapper.userData.aura = aura; }
+  const aura = createAuraEffect(level);
+  if(aura){ wrapper.add(aura.group); wrapper.userData.aura = aura; }
   return wrapper;
 }
 function animateRealisticWalk(group, moving){
@@ -498,9 +525,9 @@ function animateRealisticWalk(group, moving){
     u.current = next;
   }
 }
-function buildCharacter(def){
-  if(realisticGLTF) return buildCharacterRealistic(def);
-  return buildCharacterPrimitive(def);
+function buildCharacter(def, level){
+  if(realisticGLTF) return buildCharacterRealistic(def, level||0);
+  return buildCharacterPrimitive(def, level||0);
 }
 function updateCharacterAnim(group, moving, dt){
   if(group.userData.kind === 'realistic'){
@@ -533,7 +560,7 @@ function initAvatarPreview(){
 }
 function rebuildAvatarPreviewChar(){
   if(previewChar) previewScene.remove(previewChar);
-  previewChar = buildCharacter(AVATARS[avatarIndex]);
+  previewChar = buildCharacter(AVATARS[avatarIndex], 0);
   if(previewChar.userData.kind === 'realistic'){ previewChar.scale.set(0.9,0.9,0.9); }
   previewScene.add(previewChar);
 }
@@ -586,7 +613,7 @@ function initAvatarPreview2(){
 }
 function rebuildAvatarPreviewChar2(){
   if(previewChar2) previewScene2.remove(previewChar2);
-  previewChar2 = buildCharacter(AVATARS[avatarIndex2]);
+  previewChar2 = buildCharacter(AVATARS[avatarIndex2], myLevel);
   if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
   previewScene2.add(previewChar2);
 }
@@ -635,7 +662,7 @@ document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
     document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
     if(currentRoom && myChar){
       scene.remove(myChar);
-      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0]);
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel);
       scene.add(myChar);
     }
     msg.style.color = 'var(--ok)'; msg.textContent = 'personagem salvo!';
@@ -702,9 +729,9 @@ document.getElementById('registerBtn').addEventListener('click', async ()=>{
         wasFirst = false; return current;
       });
       const role = wasFirst ? 'dev_senior' : 'player';
-      const profile = {name, email: pendingGoogleUser.email||'', avatarIndex, role, isNew: !wasFirst, createdAt: Date.now()};
+      const profile = {name, email: pendingGoogleUser.email||'', avatarIndex, role, level:0, isNew: !wasFirst, createdAt: Date.now()};
       await db.ref('users/'+uid).set(profile);
-      myId = uid; myName = name; myAvatarIndex = avatarIndex; myRole = role; myIsNew = profile.isNew;
+      myId = uid; myName = name; myAvatarIndex = avatarIndex; myRole = role; myLevel = 0; myIsNew = profile.isNew;
       completingGoogleProfile = false; pendingGoogleUser = null;
       previewActive = false;
       document.getElementById('auth-screen').style.display='none';
@@ -729,7 +756,7 @@ document.getElementById('registerBtn').addEventListener('click', async ()=>{
       wasFirst = false; return current;
     });
     const role = wasFirst ? 'dev_senior' : 'player';
-    const profile = {name, email, avatarIndex, role, isNew: !wasFirst, createdAt: Date.now()};
+    const profile = {name, email, avatarIndex, role, level:0, isNew: !wasFirst, createdAt: Date.now()};
     await db.ref('users/'+uid).set(profile);
   }catch(e){
     console.error(e);
@@ -752,7 +779,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 
 document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
 
-let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myIsNew = false;
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false;
 
 auth.onAuthStateChanged(async (user)=>{
   if(user){
@@ -776,7 +803,7 @@ auth.onAuthStateChanged(async (user)=>{
       return;
     }
     myId = user.uid;
-    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myIsNew = !!profile.isNew;
+    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew;
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
@@ -798,6 +825,11 @@ function enterLobbyUI(){
   badge.textContent = roleInfo.label;
   badge.style.background = roleInfo.color+'33';
   badge.style.color = roleInfo.color;
+  const lvBadge = document.getElementById('whoLevel');
+  if(lvBadge){
+    const lv = levelInfo(myLevel);
+    lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`;
+  }
   document.getElementById('panelBtnLobby').style.display = isStaff(myRole) ? 'inline-block' : 'none';
   document.getElementById('panelBtn').style.display = isStaff(myRole) ? 'inline-block' : 'none';
 
@@ -1260,7 +1292,7 @@ function updateLabels(){
 function ensureRemoteChar(id, d){
   if(remote[id]) return remote[id];
   const def = AVATARS[d.avatarIndex] || AVATARS[0];
-  const group = buildCharacter(def);
+  const group = buildCharacter(def, d.level||0);
   scene.add(group);
   const labelEl = document.createElement('div');
   labelEl.className = 'plabel';
@@ -1391,7 +1423,7 @@ async function enterRoom(id, name){
   if(!scene){ buildWorld(); }
   resizeRenderer();
   if(myChar) scene.remove(myChar);
-  myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0]);
+  myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel);
   scene.add(myChar);
 
   me.x = (Math.random()*10-5); me.z = 6 + Math.random()*6; me.rotY = 0; me.targetRotY = 0;
@@ -1405,7 +1437,7 @@ async function enterRoom(id, name){
   setTimeout(()=>glCanvas.focus(), 60);
 
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
-  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
   try{
     await presenceRef.set(initialData);
     presenceRef.onDisconnect().remove();
@@ -1520,6 +1552,15 @@ async function renderRolesTab(){
     const options = assignableRoles(myRole, u.role);
     const row = document.createElement('div'); row.className='prow';
     const roleInfo = ROLES[u.role]||ROLES.player;
+
+    const levelSel = document.createElement('select');
+    LEVELS.forEach(lv=>{ const o=document.createElement('option'); o.value=lv.level; o.textContent = `Nv ${lv.level} — ${lv.name}`; if((u.level||0)===lv.level) o.selected=true; levelSel.appendChild(o); });
+    const levelBtn = document.createElement('button'); levelBtn.className='mini-btn ok'; levelBtn.textContent='salvar nível';
+    levelBtn.addEventListener('click', async ()=>{
+      try{ await db.ref('users/'+uid+'/level').set(parseInt(levelSel.value,10)); levelBtn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+      catch(e){ console.error(e); levelBtn.textContent='erro'; }
+    });
+
     if(options.length){
       const sel = document.createElement('select');
       options.forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=ROLES[r].label; if(r===u.role) o.selected=true; sel.appendChild(o); });
@@ -1529,11 +1570,14 @@ async function renderRolesTab(){
         catch(e){ console.error(e); btn.textContent='erro'; }
       });
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div>`;
-      const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center';
-      right.appendChild(sel); right.appendChild(btn);
+      const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
+      right.appendChild(sel); right.appendChild(btn); right.appendChild(levelSel); right.appendChild(levelBtn);
       row.appendChild(right);
     } else {
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
+      const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
+      right.appendChild(levelSel); right.appendChild(levelBtn);
+      row.appendChild(right);
     }
     panelBodyEl.appendChild(row);
   });
