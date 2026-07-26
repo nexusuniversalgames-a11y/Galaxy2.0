@@ -128,9 +128,13 @@
   .dp-up{ grid-column:2; grid-row:1; } .dp-left{ grid-column:1; grid-row:2; } .dp-down{ grid-column:2; grid-row:3; } .dp-right{ grid-column:3; grid-row:2; }
 
   #panelModal{ display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center; }
+  #avatarModal{ display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center; }
+  #avatarBox{ width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; }
   #panelBox{ width:min(680px,94vw); max-height:82vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; }
   #panelHead{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
   #panelHead h2{ font-size:13px; color:var(--gold); margin:0; }
+  .panelHead{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .panelHead h2{ font-size:13px; color:var(--gold); margin:0; }
   #panelClose{ background:none; border:none; color:var(--text-dim); font-size:20px; cursor:pointer; line-height:1; }
   #panelTabs{ display:flex; gap:6px; padding:12px 20px 0; }
   #panelTabs button{ padding:8px 14px; border:none; border-radius:7px 7px 0 0; background:var(--bg-deep); color:var(--text-dim); font-size:12px; cursor:pointer; }
@@ -201,6 +205,7 @@
       <div class="lobby-head">
         <h1 class="pixel">SALAS</h1>
         <div class="head-actions">
+          <button id="changeAvatarBtn">trocar personagem</button>
           <button id="panelBtnLobby" style="display:none;">painel</button>
           <button id="signOutBtn">sair da conta</button>
         </div>
@@ -249,6 +254,23 @@
     <div id="panelHead"><h2>Painel da equipe</h2><button id="panelClose">×</button></div>
     <div id="panelTabs"></div>
     <div id="panelBody"></div>
+  </div>
+</div>
+
+<div id="avatarModal">
+  <div id="avatarBox">
+    <div class="panelHead"><h2>Trocar personagem</h2><button id="avatarModalClose">×</button></div>
+    <div style="padding:18px 20px 22px;">
+      <div class="avatar-picker">
+        <button class="arrow-btn" id="prevAvatar2" type="button">&#8592;</button>
+        <div class="avatar-stage"><canvas id="avatarPreview2"></canvas></div>
+        <button class="arrow-btn" id="nextAvatar2" type="button">&#8594;</button>
+      </div>
+      <div class="avatar-name" id="avatarName2">—</div>
+      <div class="avatar-dots" id="avatarDots2"></div>
+      <button class="btn" id="saveAvatarBtn">Salvar personagem</button>
+      <div class="errmsg" id="avatarSaveMsg"></div>
+    </div>
   </div>
 </div>
 
@@ -541,6 +563,88 @@ function updateAvatarLabel(){
 }
 document.getElementById('prevAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel(); });
 document.getElementById('nextAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex + 1) % AVATARS.length; updateAvatarLabel(); });
+
+// --- modal "trocar personagem" (pra quem já tem conta e quer escolher a Aura Sombria depois) ---
+let avatarIndex2 = 0;
+let previewScene2, previewCamera2, previewRenderer2, previewChar2, preview2Active = false;
+function initAvatarPreview2(){
+  const canvas = document.getElementById('avatarPreview2');
+  previewScene2 = new THREE.Scene();
+  previewCamera2 = new THREE.PerspectiveCamera(35, 150/170, 0.1, 20);
+  previewCamera2.position.set(0, 1.3, 2.6);
+  previewCamera2.lookAt(0,1.05,0);
+  previewRenderer2 = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  previewRenderer2.setSize(150,170,false);
+  previewRenderer2.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x22264a, 1.0);
+  previewScene2.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+  dir.position.set(2,3,2);
+  previewScene2.add(dir);
+  rebuildAvatarPreviewChar2();
+  requestAnimationFrame(previewLoop2);
+}
+function rebuildAvatarPreviewChar2(){
+  if(previewChar2) previewScene2.remove(previewChar2);
+  previewChar2 = buildCharacter(AVATARS[avatarIndex2]);
+  if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
+  previewScene2.add(previewChar2);
+}
+let preview2T = 0, preview2LastT = performance.now();
+function previewLoop2(t){
+  const dt = Math.min((t-preview2LastT)/1000, 0.05); preview2LastT = t;
+  if(preview2Active){
+    preview2T += dt;
+    if(previewChar2){
+      previewChar2.rotation.y = Math.sin(preview2T*0.6)*0.5;
+      updateCharacterAnim(previewChar2, true, dt);
+    }
+    previewRenderer2.render(previewScene2, previewCamera2);
+  }
+  requestAnimationFrame(previewLoop2);
+}
+function renderAvatarDots2(){
+  const el = document.getElementById('avatarDots2');
+  el.innerHTML='';
+  AVATARS.forEach((a,i)=>{ const d = document.createElement('span'); if(i===avatarIndex2) d.className='on'; el.appendChild(d); });
+}
+function updateAvatarLabel2(){
+  document.getElementById('avatarName2').textContent = AVATARS[avatarIndex2].name;
+  renderAvatarDots2();
+  rebuildAvatarPreviewChar2();
+}
+let avatarPreview2Inited = false;
+document.getElementById('prevAvatar2').addEventListener('click', ()=>{ avatarIndex2 = (avatarIndex2 - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel2(); });
+document.getElementById('nextAvatar2').addEventListener('click', ()=>{ avatarIndex2 = (avatarIndex2 + 1) % AVATARS.length; updateAvatarLabel2(); });
+const avatarModal = document.getElementById('avatarModal');
+document.getElementById('changeAvatarBtn').addEventListener('click', ()=>{
+  avatarIndex2 = myAvatarIndex;
+  document.getElementById('avatarSaveMsg').textContent = '';
+  avatarModal.style.display = 'flex';
+  preview2Active = true;
+  if(!avatarPreview2Inited){ avatarPreview2Inited = true; initAvatarPreview2(); }
+  else updateAvatarLabel2();
+});
+document.getElementById('avatarModalClose').addEventListener('click', ()=>{ avatarModal.style.display='none'; preview2Active = false; });
+document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
+  const msg = document.getElementById('avatarSaveMsg');
+  msg.style.color = 'var(--text-dim)'; msg.textContent = 'salvando…';
+  try{
+    await db.ref('users/'+myId+'/avatarIndex').set(avatarIndex2);
+    myAvatarIndex = avatarIndex2;
+    document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
+    if(currentRoom && myChar){
+      scene.remove(myChar);
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0]);
+      scene.add(myChar);
+    }
+    msg.style.color = 'var(--ok)'; msg.textContent = 'personagem salvo!';
+    setTimeout(()=>{ avatarModal.style.display='none'; preview2Active = false; }, 700);
+  }catch(e){
+    console.error(e);
+    msg.style.color = 'var(--danger)'; msg.textContent = 'não consegui salvar, tenta de novo.';
+  }
+});
 
 const tabRegister = document.getElementById('tabRegister');
 const tabLogin = document.getElementById('tabLogin');
