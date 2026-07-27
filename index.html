@@ -697,6 +697,7 @@ function uploadMapToLibrary(file, nameInputEl, msgEl){
     .then(()=>{
       msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'mapa enviado! já aparece pra escolher ao criar sala.';
       nameInputEl.value = '';
+      loadMapLibraryOnce();
     })
     .catch(err=>{
       console.error('erro ao enviar mapa:', err);
@@ -726,6 +727,7 @@ function uploadVRMToLibrary(file){
     .then(()=>{
       msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'personagem enviado! já aparece na lista pra todo mundo escolher.';
       nameInput.value = '';
+      loadVrmLibraryOnce();
     })
     .catch(err=>{
       console.error('erro ao enviar VRM:', err);
@@ -770,8 +772,8 @@ function buildCharacterFromVRMUrl(url, level){
             model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
             wrapper.add(model);
             const bones = {armL, armR, legL, legR, kneeL, kneeR};
-            if(bones.armL) bones.armL.rotateZ(1.15);
-            if(bones.armR) bones.armR.rotateZ(-1.15);
+            if(bones.armL) bones.armL.rotateZ(-1.15);
+            if(bones.armR) bones.armR.rotateZ(1.15);
             Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
             wrapper.userData.bones = bones;
           });
