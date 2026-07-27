@@ -207,6 +207,7 @@
         <h1 class="pixel">SALAS</h1>
         <div class="head-actions">
           <button id="changeAvatarBtn">trocar personagem</button>
+          <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
           <button id="panelBtnLobby" style="display:none;">painel</button>
           <button id="signOutBtn">sair da conta</button>
         </div>
@@ -272,6 +273,7 @@
       <div class="avatar-dots" id="avatarDots2"></div>
       <div style="margin-top:18px; border-top:1px dashed var(--line); padding-top:16px;">
         <label>Personagens VRM disponíveis</label>
+        <div class="hint" style="margin-top:2px;">Só quem tem VIP ativo consegue usar um personagem VRM — sem VIP, o jogo usa o avatar padrão mesmo que você escolha um aqui.</div>
         <div id="vrmLibraryList" style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow:auto; margin-top:8px;">
           <div class="empty" style="padding:8px 0;">carregando…</div>
         </div>
@@ -293,6 +295,18 @@
       </div>
       <button class="btn" id="saveAvatarBtn">Salvar personagem</button>
       <div class="errmsg" id="avatarSaveMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="vipModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>✨ VIP Nébula</h2><button id="vipModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="hint" style="margin-bottom:10px;">Com VIP ativo você pode usar personagens VRM de verdade no jogo. Escolhe um plano abaixo — vai abrir a página de pagamento do Mercado Pago.</div>
+      <div id="vipStatusLine" style="margin-bottom:12px; font-size:13px; color:var(--nebula-soft);"></div>
+      <div id="vipPlansList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      <div class="errmsg" id="vipBuyMsg"></div>
     </div>
   </div>
 </div>
@@ -335,6 +349,9 @@ const supabaseClient = window.supabase.createClient(
   'https://jsviqlxzjrlhvmubxwep.supabase.co',
   'sb_publishable_YyyANARR5-cTwVobklEnVg_6FKINrce'
 );
+const EDGE_FUNCTIONS_BASE = 'https://jsviqlxzjrlhvmubxwep.supabase.co/functions/v1';
+const VIP_PRICES = {'1week':4.90, '1month':14.90, '5months':69.90, '1year':146.90, '2years':268.90};
+const VIP_NAMES = {'1week':'1 semana', '1month':'1 mês', '5months':'5 meses', '1year':'1 ano', '2years':'2 anos'};
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
@@ -374,6 +391,7 @@ const ROLES = {
 function rankOf(role){ return (ROLES[role]||ROLES.player).rank; }
 function canCreateRoom(role){ return rankOf(role) >= ROLES.gm.rank; }
 function canSeeRolesTab(role){ return rankOf(role) >= ROLES.gm.rank; }
+function canGrantVip(role){ return rankOf(role) >= ROLES.gm.rank; } // dev e GM podem dar VIP manual
 function canSeeReportsTab(role){ return rankOf(role) >= ROLES.mod.rank; }
 function canSeeNewUsersTab(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
@@ -421,6 +439,113 @@ const LEVELS = [
   {level:10, name:'Supremo',       colors:'rainbow'}                                                                                        // arco-íris
 ];
 function levelInfo(level){ return LEVELS[Math.max(0, Math.min(level|0, LEVELS.length-1))]; }
+
+// ================== SISTEMA DE LEVEL POR TEMPO JOGADO + VIP ==================
+// "dias jogados" aqui = tempo ACUMULADO online no jogo (não dias de calendário desde o cadastro).
+// Cada 60s conectado numa sala soma 60 em users/{uid}/totalPlaySeconds (ver playTimeTick()).
+const DAY_SECONDS = 86400;
+const VIP_TIER_RANK = {'1week':1, '1month':2, '5months':3, '1year':4, '2years':5};
+// quantas mensagens de chat são necessárias pra cada level 8/9/10 — ajuste à vontade
+const CHAT_THRESHOLD_LV8 = 300;
+const CHAT_THRESHOLD_LV9 = 600;
+const CHAT_THRESHOLD_LV10 = 1000;
+
+function hasActiveVIP(vipActiveUntil){ return !!vipActiveUntil && vipActiveUntil > Date.now(); }
+function resolveVrmUrl(vrmId, vipActiveUntil){
+  // só quem tem VIP ativo consegue usar a skin/personagem VRM — sem VIP, cai pro avatar padrão
+  if(!vrmId || !hasActiveVIP(vipActiveUntil)) return null;
+  return (vrmLibrary[vrmId]||{}).url || null;
+}
+function everBoughtTierOrHigher(profile, tier){
+  const need = VIP_TIER_RANK[tier]||99;
+  const hist = Array.isArray(profile.vipHistory) ? profile.vipHistory : [];
+  return hist.some(p => (VIP_TIER_RANK[p.tier]||0) >= need);
+}
+function boughtAnyVipWithinDays(profile, days){
+  const cutoff = Date.now() - days*DAY_SECONDS*1000;
+  const hist = Array.isArray(profile.vipHistory) ? profile.vipHistory : [];
+  return hist.some(p => (p.purchasedAt||0) >= cutoff);
+}
+// busca o status de VIP no Supabase (é lá que fica, confirmado pelo pagamento — não no Firebase)
+async function fetchVipStatus(uid){
+  try{
+    const {data, error} = await supabaseClient.from('vip_status').select('*').eq('uid', uid).maybeSingle();
+    if(error){ console.error('erro ao buscar vip_status:', error); return {tier:null, active_until:null, history:[], freeGrant6moUsed:false}; }
+    return data || {tier:null, active_until:null, history:[], freeGrant6moUsed:false};
+  }catch(e){
+    console.error('erro ao buscar vip_status:', e);
+    return {tier:null, active_until:null, history:[], freeGrant6moUsed:false};
+  }
+}
+// calcula o maior level que o perfil JÁ merece pelos critérios — nunca reduz o level atual sozinho
+function computeEligibleLevel(profile){
+  const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
+  const chatCount = profile.chatMessageCount||0;
+  const activeVipTierRank = hasActiveVIP(profile.vipActiveUntil) ? (VIP_TIER_RANK[profile.vipTier]||0) : 0;
+  let lvl = 0;
+  if(days >= 1)   lvl = 1;
+  if(days >= 5)   lvl = 2;
+  if(days >= 10)  lvl = 3;
+  if(days >= 20 && everBoughtTierOrHigher(profile,'1week'))  lvl = 4;
+  if(days >= 20 && everBoughtTierOrHigher(profile,'1month')) lvl = 5;
+  if(days >= 90 && activeVipTierRank >= VIP_TIER_RANK['1month']) lvl = 6;
+  if(days >= 365) lvl = Math.max(lvl, 7);
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV8  && everBoughtTierOrHigher(profile,'5months')) lvl = 8;
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV9  && everBoughtTierOrHigher(profile,'1year'))   lvl = 9;
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV10 && everBoughtTierOrHigher(profile,'2years'))  lvl = 10;
+  return lvl;
+}
+// roda depois de cada tick de tempo jogado (e pode ser chamado a qualquer momento) —
+// sobe o level se necessário, e dá o VIP grátis de 6 meses uma única vez
+async function checkAndApplyLevelUp(){
+  if(!myId) return;
+  try{
+    const snap = await db.ref('users/'+myId).once('value');
+    const profile = snap.val() || {};
+    const vipRow = await fetchVipStatus(myId);
+    profile.vipTier = vipRow.tier || null;
+    profile.vipActiveUntil = vipRow.active_until || null;
+    profile.vipHistory = vipRow.history || [];
+    const updates = {};
+    const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
+
+    // presente de 6 meses: 1 semana de VIP grátis, só uma vez, se comprou algum VIP nos últimos 3 meses
+    if(days >= 180 && !vipRow.freeGrant6moUsed && boughtAnyVipWithinDays(profile, 90)){
+      try{
+        const resp = await fetch(EDGE_FUNCTIONS_BASE+'/grant-free-vip', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uid: myId})
+        });
+        if(resp.ok){
+          const fresh = await fetchVipStatus(myId);
+          profile.vipTier = fresh.tier || null;
+          profile.vipActiveUntil = fresh.active_until || null;
+          profile.vipHistory = fresh.history || [];
+        }
+      }catch(e){ console.error('erro ao conceder vip grátis de 6 meses:', e); }
+    }
+
+    const eligible = computeEligibleLevel(profile);
+    const newLevel = Math.max(profile.level||0, eligible); // nunca desce sozinho (preserva ajuste manual de dev também)
+    if(newLevel !== (profile.level||0)) updates.level = newLevel;
+
+    if(Object.keys(updates).length){
+      await db.ref('users/'+myId).update(updates);
+    }
+    myLevel = newLevel;
+    myVipActiveUntil = profile.vipActiveUntil || null;
+    const lvBadge = document.getElementById('whoLevel');
+    if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
+    if(currentRoom && myChar && newLevel !== myChar.userData._levelUsed){
+      scene.remove(myChar);
+      const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
+      myChar.userData._levelUsed = myLevel;
+      myChar.position.set(me.x, 0, me.z);
+      scene.add(myChar);
+      if(presenceRef) presenceRef.update({level:myLevel, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
+    }
+  }catch(e){ console.error('erro ao checar level:', e); }
+}
 
 // --- efeito de aura (partículas coloridas subindo ao redor do personagem, cor varia por nível) ---
 const _auraTextureCache = {};
@@ -757,6 +882,62 @@ document.getElementById('vrmFileInput').addEventListener('change', e=>{
   if(file) uploadVRMToLibrary(file);
 });
 
+// --- loja de VIP ---
+function renderVipPlans(){
+  const el = document.getElementById('vipPlansList');
+  el.innerHTML = '';
+  Object.keys(VIP_PRICES).forEach(tier=>{
+    const row = document.createElement('div');
+    row.className = 'room-item';
+    row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center';
+    row.innerHTML = `<div class="rn">${VIP_NAMES[tier]}</div><button class="btn secondary" style="width:auto; padding:6px 14px;">R$ ${VIP_PRICES[tier].toFixed(2).replace('.',',')}</button>`;
+    row.querySelector('button').onclick = ()=> buyVip(tier);
+    el.appendChild(row);
+  });
+}
+async function refreshVipStatusLine(){
+  const el = document.getElementById('vipStatusLine');
+  el.textContent = 'verificando…';
+  const v = await fetchVipStatus(myId);
+  if(hasActiveVIP(v.active_until)){
+    const dt = new Date(v.active_until);
+    el.textContent = `VIP ativo (${VIP_NAMES[v.tier]||v.tier}) até ${dt.toLocaleDateString('pt-BR')}`;
+    el.style.color = '#5fe1a0';
+  } else {
+    el.textContent = 'você não tem VIP ativo no momento.';
+    el.style.color = 'var(--text-dim)';
+  }
+}
+async function buyVip(tier){
+  const msg = document.getElementById('vipBuyMsg');
+  msg.style.color = 'var(--text-dim)'; msg.textContent = 'gerando pagamento…';
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/create-vip-payment', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({uid: myId, tier})
+    });
+    const data = await resp.json();
+    if(!resp.ok || !data.checkout_url){
+      console.error('erro ao criar pagamento:', data);
+      msg.style.color = 'var(--danger)'; msg.textContent = 'erro ao gerar pagamento (veja o Console/F12).';
+      return;
+    }
+    window.location.href = data.checkout_url;
+  }catch(e){
+    console.error('erro ao comprar vip:', e);
+    msg.style.color = 'var(--danger)'; msg.textContent = 'erro de conexão ao gerar pagamento.';
+  }
+}
+document.getElementById('buyVipBtn').addEventListener('click', ()=>{
+  document.getElementById('vipBuyMsg').textContent = '';
+  renderVipPlans();
+  refreshVipStatusLine();
+  document.getElementById('vipModal').style.display = 'flex';
+});
+document.getElementById('vipModalClose').addEventListener('click', ()=>{
+  document.getElementById('vipModal').style.display = 'none';
+});
+
 // --- construir o personagem a partir de uma URL de VRM (usado tanto pro seu quanto pros outros jogadores) ---
 function buildCharacterFromVRMUrl(url, level){
   const wrapper = new THREE.Group();
@@ -901,7 +1082,7 @@ function initAvatarPreview2(){
 }
 function rebuildAvatarPreviewChar2(){
   if(previewChar2) previewScene2.remove(previewChar2);
-  const vrmUrl = selectedVrmId2 ? (vrmLibrary[selectedVrmId2]||{}).url : null;
+  const vrmUrl = resolveVrmUrl(selectedVrmId2, myVipActiveUntil);
   previewChar2 = buildCharacter(AVATARS[avatarIndex2], levelIndex2, vrmUrl);
   if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
   previewScene2.add(previewChar2);
@@ -969,7 +1150,7 @@ document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
     if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
     if(currentRoom && myChar){
       scene.remove(myChar);
-      const vrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
+      const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
       myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
       myChar.position.set(me.x, 0, me.z);
       scene.add(myChar);
@@ -1089,7 +1270,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 
 document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
 
-let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null;
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null, myVipActiveUntil = null;
 
 auth.onAuthStateChanged(async (user)=>{
   if(user){
@@ -1114,6 +1295,7 @@ auth.onAuthStateChanged(async (user)=>{
     }
     myId = user.uid;
     myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
+    fetchVipStatus(myId).then(v=>{ myVipActiveUntil = v.active_until||null; });
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
@@ -1707,7 +1889,7 @@ function updateLabels(){
 function ensureRemoteChar(id, d){
   if(remote[id]) return remote[id];
   const def = AVATARS[d.avatarIndex] || AVATARS[0];
-  const vrmUrl = d.vrmId ? (vrmLibrary[d.vrmId]||{}).url : null;
+  const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
   const group = buildCharacter(def, d.level||0, vrmUrl);
   scene.add(group);
   const labelEl = document.createElement('div');
@@ -1783,6 +1965,7 @@ async function sendChatMessage(text){
   myBubbleText = text; myBubbleUntil = Date.now()+4500;
   try{ await db.ref(`rooms/${currentRoom}/messages`).push(d); }
   catch(err){ console.error('send message error:', err); addFeedMsg(myName, text); addFeedMsg(null, 'a mensagem apareceu só pra você — a sincronização falhou.', true); }
+  db.ref('users/'+myId+'/chatMessageCount').transaction(cur => (cur||0) + 1).catch(()=>{});
 }
 
 async function reportPlayer(id){
@@ -1800,7 +1983,14 @@ async function reportPlayer(id){
   }catch(e){ console.error(e); addFeedMsg(null, 'não consegui enviar a denúncia agora.', true); }
 }
 
-let presenceRef=null, playersRef=null, messagesRef=null, metaRef=null, heartbeatTimer=null;
+let presenceRef=null, playersRef=null, messagesRef=null, metaRef=null, heartbeatTimer=null, playTimeTimer=null;
+async function playTimeTick(){
+  if(!myId || !currentRoom) return;
+  try{
+    await db.ref('users/'+myId+'/totalPlaySeconds').transaction(cur => (cur||0) + 60);
+    await checkAndApplyLevelUp();
+  }catch(e){ console.error('erro no tick de tempo jogado:', e); }
+}
 
 async function cleanupStalePresence(targetRoomId){
   // clear this session's own listeners/presence if it's sitting in a room already
@@ -1867,8 +2057,11 @@ async function enterRoom(id, name){
   });
   resizeRenderer();
   if(myChar) scene.remove(myChar);
-  const myVrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
+  const vipRowNow = await fetchVipStatus(myId);
+  myVipActiveUntil = vipRowNow.active_until || null;
+  const myVrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
   myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, myVrmUrl);
+  myChar.userData._levelUsed = myLevel;
   scene.add(myChar);
 
   me.x = (Math.random()*10-5); me.z = 6 + Math.random()*6; me.rotY = 0; me.targetRotY = 0;
@@ -1882,7 +2075,7 @@ async function enterRoom(id, name){
   setTimeout(()=>glCanvas.focus(), 60);
 
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
-  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
   try{
     await presenceRef.set(initialData);
     presenceRef.onDisconnect().remove();
@@ -1890,6 +2083,8 @@ async function enterRoom(id, name){
     db.ref('users/'+myId+'/activeRoom').onDisconnect().remove();
   }catch(e){ console.error('presence set error', e); }
   heartbeatTimer = setInterval(pushPresence, 150);
+  playTimeTimer = setInterval(playTimeTick, 60000);
+  checkAndApplyLevelUp();
 
   playersRef = db.ref(`rooms/${id}/players`);
   playersRef.on('value', snap=>{
@@ -1914,6 +2109,7 @@ async function enterRoom(id, name){
 }
 async function leaveRoom(){
   clearInterval(heartbeatTimer);
+  clearInterval(playTimeTimer);
   try{
     if(playersRef) playersRef.off();
     if(messagesRef) messagesRef.off();
@@ -2030,11 +2226,31 @@ async function renderRolesTab(){
   const val = snap.val() || {};
   panelBodyEl.innerHTML='';
   const canLevel = canTestAura(myRole);
+  const canVip = canGrantVip(myRole);
   Object.keys(val).forEach(uid=>{
     const u = val[uid];
     const options = assignableRoles(myRole, u.role);
     const row = document.createElement('div'); row.className='prow';
     const roleInfo = ROLES[u.role]||ROLES.player;
+
+    let vipSel, vipBtn;
+    if(canVip){
+      vipSel = document.createElement('select');
+      Object.keys(VIP_NAMES).forEach(tier=>{ const o=document.createElement('option'); o.value=tier; o.textContent='VIP '+VIP_NAMES[tier]; vipSel.appendChild(o); });
+      vipBtn = document.createElement('button'); vipBtn.className='mini-btn ok'; vipBtn.textContent='conceder VIP';
+      vipBtn.addEventListener('click', async ()=>{
+        vipBtn.textContent='enviando…';
+        try{
+          const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-grant-vip', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({targetUid: uid, tier: vipSel.value, grantedBy: myId})
+          });
+          if(!resp.ok) throw new Error('falha na requisição');
+          vipBtn.textContent='✓ concedido';
+          setTimeout(()=>{ vipBtn.textContent='conceder VIP'; }, 1500);
+        }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; }
+      });
+    }
 
     let levelSel, levelBtn;
     if(canLevel){
@@ -2059,12 +2275,14 @@ async function renderRolesTab(){
       const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
       right.appendChild(sel); right.appendChild(btn);
       if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
+      if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); }
       row.appendChild(right);
     } else {
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
-      if(canLevel){
+      if(canLevel || canVip){
         const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
-        right.appendChild(levelSel); right.appendChild(levelBtn);
+        if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
+        if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); }
         row.appendChild(right);
       }
     }
