@@ -670,7 +670,7 @@ async function loadMapLibraryOnce(){
   if(error){ console.error('erro ao carregar lista de mapas:', error); return; }
   mapLibrary = mapRowsToLibrary(data);
   renderMapsTab_ifOpen();
-  renderRoomMapSelect();
+  renderRoomMapPicker();
 }
 function startMapLibraryListener(){
   loadMapLibraryOnce();
@@ -1128,9 +1128,15 @@ function enterLobbyUI(){
   const zone = document.getElementById('createRoomZone');
   if(canCreateRoom(myRole)){
     zone.innerHTML = `<div class="create-row"><input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)"><button class="btn" id="createRoomBtn">Criar e entrar</button></div>
-      <div style="margin-top:8px;"><select id="roomMapSelect" style="width:100%; background:var(--bg-deep); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px;"></select></div>`;
+      <div style="margin-top:14px;">
+        <label style="display:block; font-size:11px; color:var(--text-dim); margin:0 0 8px; letter-spacing:.5px; text-transform:uppercase;">Mapa da sala</label>
+        <div id="roomMapList" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow:auto;">
+          <div class="empty" style="padding:8px 0;">carregando…</div>
+        </div>
+      </div>`;
     document.getElementById('createRoomBtn').addEventListener('click', createRoomHandler);
-    renderRoomMapSelect();
+    selectedRoomMapId = null;
+    renderRoomMapPicker();
   } else {
     zone.innerHTML = `<div class="locked-note">Criação de salas está limitada à equipe de desenvolvimento (Desenvolvedor/GM) enquanto o jogo ainda está em testes.</div>`;
   }
@@ -1178,27 +1184,41 @@ function renderRoomList(rooms){
     roomListEl.appendChild(item);
   });
 }
-function renderRoomMapSelect(){
-  const sel = document.getElementById('roomMapSelect');
-  if(!sel) return;
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">Mapa padrão (Nébula)</option>';
-  Object.keys(mapLibrary).forEach(id=>{
-    const opt = document.createElement('option');
-    opt.value = id; opt.textContent = mapLibrary[id].name || 'sem nome';
-    sel.appendChild(opt);
+let selectedRoomMapId = null; // mapa escolhido na hora de criar sala (lista clicável, igual à de VRM)
+function renderRoomMapPicker(){
+  const el = document.getElementById('roomMapList');
+  if(!el) return;
+  el.innerHTML = '';
+  const defaultRow = document.createElement('div');
+  defaultRow.className = 'room-item'; defaultRow.style.cursor = 'pointer';
+  if(!selectedRoomMapId) defaultRow.style.borderColor = 'var(--nebula-soft)';
+  defaultRow.innerHTML = `<div class="rn">Mapa padrão (Nébula)</div>`;
+  defaultRow.onclick = ()=>{ selectedRoomMapId = null; renderRoomMapPicker(); };
+  el.appendChild(defaultRow);
+  const ids = Object.keys(mapLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum mapa customizado enviado ainda.';
+    el.appendChild(empty);
+  }
+  ids.forEach(id=>{
+    const item = mapLibrary[id];
+    const row = document.createElement('div');
+    row.className = 'room-item'; row.style.cursor = 'pointer';
+    if(selectedRoomMapId === id) row.style.borderColor = 'var(--nebula-soft)';
+    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
+    row.onclick = ()=>{ selectedRoomMapId = id; renderRoomMapPicker(); };
+    el.appendChild(row);
   });
-  if(prev && mapLibrary[prev]) sel.value = prev;
 }
 async function createRoomHandler(){
   const input = document.getElementById('roomNameInput');
   const name = input.value.trim().slice(0,24);
   if(!name) return;
-  const mapSel = document.getElementById('roomMapSelect');
-  const mapId = mapSel && mapSel.value ? mapSel.value : null;
+  const mapId = selectedRoomMapId || null;
   const id = 'r_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,20) + '_' + Math.random().toString(36).slice(2,6);
   try{ await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now(), mapId: mapId || null}); }catch(e){ console.error(e); }
   input.value='';
+  selectedRoomMapId = null;
   enterRoom(id, name);
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
