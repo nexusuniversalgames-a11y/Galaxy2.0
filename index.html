@@ -363,6 +363,7 @@ function canSeeNewUsersTab(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function canTestAura(role){ return rankOf(role) >= ROLES.dev.rank; }
 function canManageVRM(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos personagens VRM pro jogo todo
+function canManageMaps(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos mapas pro jogo todo
 function assignableRoles(actorRole, targetCurrentRole){
   if(actorRole === 'dev_senior') return Object.keys(ROLES);
   if(actorRole === 'dev'){
@@ -657,6 +658,55 @@ function startVrmLibraryListener(){
     .subscribe();
 }
 startVrmLibraryListener();
+// --- biblioteca de mapas (mesmo esquema do VRM, tabela/bucket separados) ---
+let mapLibrary = {}; // {id: {name, url}}
+function mapRowsToLibrary(rows){
+  const lib = {};
+  (rows||[]).forEach(r=>{ lib[r.id] = {name:r.name, url:r.url, addedBy:r.added_by, addedAt:r.added_at}; });
+  return lib;
+}
+async function loadMapLibraryOnce(){
+  const {data, error} = await supabaseClient.from('game_maps').select('*');
+  if(error){ console.error('erro ao carregar lista de mapas:', error); return; }
+  mapLibrary = mapRowsToLibrary(data);
+  renderMapsTab_ifOpen();
+  renderRoomMapSelect();
+}
+function startMapLibraryListener(){
+  loadMapLibraryOnce();
+  supabaseClient
+    .channel('game_maps_changes')
+    .on('postgres_changes', {event:'*', schema:'public', table:'game_maps'}, ()=>{ loadMapLibraryOnce(); })
+    .subscribe();
+}
+startMapLibraryListener();
+function uploadMapToLibrary(file, nameInputEl, msgEl){
+  const name = (nameInputEl.value||'').trim().slice(0,24) || file.name.replace(/\.glb$/i,'').slice(0,24);
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'enviando mapa…';
+  const id = 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  const path = id + '.glb';
+  supabaseClient.storage.from('game-maps').upload(path, file, {contentType:'model/gltf-binary'})
+    .then(({error})=>{
+      if(error) throw error;
+      const {data} = supabaseClient.storage.from('game-maps').getPublicUrl(path);
+      return supabaseClient.from('game_maps').insert({id, name, url:data.publicUrl, added_by:myId, added_at:Date.now()});
+    })
+    .then(({error})=>{
+      if(error) throw error;
+    })
+    .then(()=>{
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'mapa enviado! já aparece pra escolher ao criar sala.';
+      nameInputEl.value = '';
+    })
+    .catch(err=>{
+      console.error('erro ao enviar mapa:', err);
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+    });
+}
+function renderMapsTab_ifOpen(){
+  if(typeof panelCurrentTab !== 'undefined' && panelCurrentTab === 'maps') renderMapsTab();
+}
 function uploadVRMToLibrary(file){
   const msgEl = document.getElementById('vrmLoadMsg');
   const nameInput = document.getElementById('vrmNameInput');
@@ -1077,8 +1127,10 @@ function enterLobbyUI(){
 
   const zone = document.getElementById('createRoomZone');
   if(canCreateRoom(myRole)){
-    zone.innerHTML = `<div class="create-row"><input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)"><button class="btn" id="createRoomBtn">Criar e entrar</button></div>`;
+    zone.innerHTML = `<div class="create-row"><input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)"><button class="btn" id="createRoomBtn">Criar e entrar</button></div>
+      <div style="margin-top:8px;"><select id="roomMapSelect" style="width:100%; background:var(--bg-deep); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px;"></select></div>`;
     document.getElementById('createRoomBtn').addEventListener('click', createRoomHandler);
+    renderRoomMapSelect();
   } else {
     zone.innerHTML = `<div class="locked-note">Criação de salas está limitada à equipe de desenvolvimento (Desenvolvedor/GM) enquanto o jogo ainda está em testes.</div>`;
   }
@@ -1126,18 +1178,34 @@ function renderRoomList(rooms){
     roomListEl.appendChild(item);
   });
 }
+function renderRoomMapSelect(){
+  const sel = document.getElementById('roomMapSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Mapa padrão (Nébula)</option>';
+  Object.keys(mapLibrary).forEach(id=>{
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = mapLibrary[id].name || 'sem nome';
+    sel.appendChild(opt);
+  });
+  if(prev && mapLibrary[prev]) sel.value = prev;
+}
 async function createRoomHandler(){
   const input = document.getElementById('roomNameInput');
   const name = input.value.trim().slice(0,24);
   if(!name) return;
+  const mapSel = document.getElementById('roomMapSelect');
+  const mapId = mapSel && mapSel.value ? mapSel.value : null;
   const id = 'r_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,20) + '_' + Math.random().toString(36).slice(2,6);
-  try{ await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now()}); }catch(e){ console.error(e); }
+  try{ await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now(), mapId: mapId || null}); }catch(e){ console.error(e); }
   input.value='';
   enterRoom(id, name);
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 let currentRoom = null;
+let currentWorldMapId = undefined; // undefined = mundo ainda não construído
+let usingCustomMap = false;
 let scene, camera, renderer, glCanvas;
 let myChar, myMoving=false;
 const me = {x:0, z:6, rotY:0, targetRotY:0};
@@ -1295,7 +1363,7 @@ function buildFountain(){
   buildBench(FOUNTAIN.x, FOUNTAIN.z-3.6, 0);
 }
 
-function buildWorld(){
+function buildWorld(mapUrl){
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xffe0b3, 22, 72);
   camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
@@ -1320,6 +1388,22 @@ function buildWorld(){
   for(let i=0;i<11;i++){
     const a = Math.random()*Math.PI*2, r = 20+Math.random()*22;
     makeCloud(Math.cos(a)*r, 24+Math.random()*10, Math.sin(a)*r, 1.4+Math.random()*1.6);
+  }
+
+  usingCustomMap = !!mapUrl;
+  if(mapUrl){
+    // mapa customizado enviado por um dev: carrega o .glb e pula a geração procedural padrão.
+    // OBS: mapas customizados usam chão "chato" (altura 0) — sem o relevo procedural do mapa padrão.
+    const loader = new THREE.GLTFLoader();
+    loader.load(mapUrl,
+      gltf=>{
+        gltf.scene.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+        scene.add(gltf.scene);
+      },
+      undefined,
+      err=>console.error('erro ao carregar mapa customizado:', err)
+    );
+    return;
   }
 
   const groundGeo = new THREE.PlaneGeometry(140,140,80,80);
@@ -1424,6 +1508,7 @@ function buildWorld(){
   }
 }
 function groundHeightAt(x,z){
+  if(usingCustomMap) return 0;
   const base = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
   const d = Math.hypot(x-POND.x, z-POND.z);
   const basin = -0.85;
@@ -1665,7 +1750,16 @@ async function enterRoom(id, name){
   // O modelo genérico "Soldier" (tryLoadRealisticModel) foi desativado de propósito —
   // ele não combina com o estilo anime/chibi. Agora o jogo sempre usa buildCharacterPrimitive,
   // que já foi refeito com visual mais bonito.
-  if(!scene){ buildWorld(); }
+  let roomMapId = null;
+  try{
+    const metaSnap = await db.ref('rooms/'+id+'/meta').once('value');
+    roomMapId = (metaSnap.val()||{}).mapId || null;
+  }catch(e){ console.error('erro ao ler mapa da sala:', e); }
+  if(!scene || currentWorldMapId !== roomMapId){
+    const roomMapUrl = roomMapId ? (mapLibrary[roomMapId]||{}).url : null;
+    buildWorld(roomMapUrl);
+    currentWorldMapId = roomMapId;
+  }
   resizeRenderer();
   if(myChar) scene.remove(myChar);
   const myVrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
@@ -1763,6 +1857,7 @@ function openPanel(){
   if(canSeeRolesTab(myRole)) tabs.push({id:'roles', label:'Cargos'});
   if(canSeeReportsTab(myRole)) tabs.push({id:'reports', label:'Denúncias'});
   if(canSeeNewUsersTab(myRole)) tabs.push({id:'newusers', label:'Novos usuários'});
+  if(canManageMaps(myRole)) tabs.push({id:'maps', label:'Mapas'});
   panelTabsEl.innerHTML='';
   tabs.forEach((t,i)=>{
     const b = document.createElement('button');
@@ -1786,6 +1881,41 @@ async function renderPanelTab(){
   if(panelCurrentTab === 'roles') return renderRolesTab();
   if(panelCurrentTab === 'reports') return renderReportsTab();
   if(panelCurrentTab === 'newusers') return renderNewUsersTab();
+  if(panelCurrentTab === 'maps') return renderMapsTab();
+}
+function renderMapsTab(){
+  panelBodyEl.innerHTML = '';
+  const ids = Object.keys(mapLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum mapa enviado ainda.';
+    panelBodyEl.appendChild(empty);
+  } else {
+    ids.forEach(id=>{
+      const item = mapLibrary[id];
+      const row = document.createElement('div'); row.className='prow';
+      row.innerHTML = `<div class="info">${escapeHtml(item.name||'sem nome')}</div>`;
+      panelBodyEl.appendChild(row);
+    });
+  }
+  const uploadZone = document.createElement('div');
+  uploadZone.style.marginTop = '18px';
+  uploadZone.style.borderTop = '1px dashed var(--line)';
+  uploadZone.style.paddingTop = '14px';
+  uploadZone.innerHTML = `
+    <label>Adicionar novo mapa (.glb)</label>
+    <input type="text" id="mapNameInput" placeholder="nome do mapa" style="margin-top:6px;">
+    <input type="file" id="mapFileInput" accept=".glb" style="display:none;">
+    <button class="btn secondary" id="mapUploadBtn" type="button" style="margin-top:8px;">Escolher arquivo .glb e enviar</button>
+    <div class="errmsg" id="mapLoadMsg"></div>
+  `;
+  panelBodyEl.appendChild(uploadZone);
+  const mapMsgEl = document.getElementById('mapLoadMsg');
+  const mapNameEl = document.getElementById('mapNameInput');
+  document.getElementById('mapUploadBtn').addEventListener('click', ()=> document.getElementById('mapFileInput').click());
+  document.getElementById('mapFileInput').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(file) uploadMapToLibrary(file, mapNameEl, mapMsgEl);
+  });
 }
 
 async function renderRolesTab(){
