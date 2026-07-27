@@ -272,6 +272,7 @@
       <div class="avatar-dots" id="avatarDots2"></div>
       <div style="margin-top:18px; border-top:1px dashed var(--line); padding-top:16px;">
         <label>Personagens VRM disponíveis</label>
+        <div class="hint" style="margin-top:2px;">Só quem tem VIP ativo consegue usar um personagem VRM — sem VIP, o jogo usa o avatar padrão mesmo que você escolha um aqui.</div>
         <div id="vrmLibraryList" style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow:auto; margin-top:8px;">
           <div class="empty" style="padding:8px 0;">carregando…</div>
         </div>
@@ -421,6 +422,92 @@ const LEVELS = [
   {level:10, name:'Supremo',       colors:'rainbow'}                                                                                        // arco-íris
 ];
 function levelInfo(level){ return LEVELS[Math.max(0, Math.min(level|0, LEVELS.length-1))]; }
+
+// ================== SISTEMA DE LEVEL POR TEMPO JOGADO + VIP ==================
+// "dias jogados" aqui = tempo ACUMULADO online no jogo (não dias de calendário desde o cadastro).
+// Cada 60s conectado numa sala soma 60 em users/{uid}/totalPlaySeconds (ver playTimeTick()).
+const DAY_SECONDS = 86400;
+const VIP_TIER_RANK = {'1week':1, '1month':2, '5months':3, '1year':4, '2years':5};
+// quantas mensagens de chat são necessárias pra cada level 8/9/10 — ajuste à vontade
+const CHAT_THRESHOLD_LV8 = 300;
+const CHAT_THRESHOLD_LV9 = 600;
+const CHAT_THRESHOLD_LV10 = 1000;
+
+function hasActiveVIP(vipActiveUntil){ return !!vipActiveUntil && vipActiveUntil > Date.now(); }
+function resolveVrmUrl(vrmId, vipActiveUntil){
+  // só quem tem VIP ativo consegue usar a skin/personagem VRM — sem VIP, cai pro avatar padrão
+  if(!vrmId || !hasActiveVIP(vipActiveUntil)) return null;
+  return (vrmLibrary[vrmId]||{}).url || null;
+}
+function everBoughtTierOrHigher(profile, tier){
+  const need = VIP_TIER_RANK[tier]||99;
+  const hist = profile.vipHistory || {};
+  return Object.values(hist).some(p => (VIP_TIER_RANK[p.tier]||0) >= need);
+}
+function boughtAnyVipWithinDays(profile, days){
+  const cutoff = Date.now() - days*DAY_SECONDS*1000;
+  const hist = profile.vipHistory || {};
+  return Object.values(hist).some(p => (p.purchasedAt||0) >= cutoff);
+}
+// calcula o maior level que o perfil JÁ merece pelos critérios — nunca reduz o level atual sozinho
+function computeEligibleLevel(profile){
+  const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
+  const chatCount = profile.chatMessageCount||0;
+  const activeVipTierRank = hasActiveVIP(profile.vipActiveUntil) ? (VIP_TIER_RANK[profile.vipTier]||0) : 0;
+  let lvl = 0;
+  if(days >= 1)   lvl = 1;
+  if(days >= 5)   lvl = 2;
+  if(days >= 10)  lvl = 3;
+  if(days >= 20 && everBoughtTierOrHigher(profile,'1week'))  lvl = 4;
+  if(days >= 20 && everBoughtTierOrHigher(profile,'1month')) lvl = 5;
+  if(days >= 90 && activeVipTierRank >= VIP_TIER_RANK['1month']) lvl = 6;
+  if(days >= 365) lvl = Math.max(lvl, 7);
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV8  && everBoughtTierOrHigher(profile,'5months')) lvl = 8;
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV9  && everBoughtTierOrHigher(profile,'1year'))   lvl = 9;
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV10 && everBoughtTierOrHigher(profile,'2years'))  lvl = 10;
+  return lvl;
+}
+// roda depois de cada tick de tempo jogado (e pode ser chamado a qualquer momento) —
+// sobe o level se necessário, e dá o VIP grátis de 6 meses uma única vez
+async function checkAndApplyLevelUp(){
+  if(!myId) return;
+  try{
+    const snap = await db.ref('users/'+myId).once('value');
+    const profile = snap.val() || {};
+    const updates = {};
+    const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
+
+    // presente de 6 meses: 1 semana de VIP grátis, só uma vez, se comprou algum VIP nos últimos 3 meses
+    if(days >= 180 && !profile.freeVipGrantedAt6mo && boughtAnyVipWithinDays(profile, 90)){
+      const base = hasActiveVIP(profile.vipActiveUntil) ? profile.vipActiveUntil : Date.now();
+      updates.vipActiveUntil = base + 7*DAY_SECONDS*1000;
+      updates['vipHistory/free_6mo_'+Date.now()] = {tier:'1week', purchasedAt:Date.now(), free:true};
+      updates.freeVipGrantedAt6mo = Date.now();
+    }
+
+    const mergedProfile = Object.assign({}, profile, updates);
+    const eligible = computeEligibleLevel(mergedProfile);
+    const newLevel = Math.max(profile.level||0, eligible); // nunca desce sozinho (preserva ajuste manual de dev também)
+    if(newLevel !== (profile.level||0)) updates.level = newLevel;
+
+    if(Object.keys(updates).length){
+      await db.ref('users/'+myId).update(updates);
+    }
+    myLevel = newLevel;
+    myVipActiveUntil = updates.vipActiveUntil || profile.vipActiveUntil || null;
+    const lvBadge = document.getElementById('whoLevel');
+    if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
+    if(currentRoom && myChar && newLevel !== myChar.userData._levelUsed){
+      scene.remove(myChar);
+      const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
+      myChar.userData._levelUsed = myLevel;
+      myChar.position.set(me.x, 0, me.z);
+      scene.add(myChar);
+      if(presenceRef) presenceRef.update({level:myLevel, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
+    }
+  }catch(e){ console.error('erro ao checar level:', e); }
+}
 
 // --- efeito de aura (partículas coloridas subindo ao redor do personagem, cor varia por nível) ---
 const _auraTextureCache = {};
@@ -901,7 +988,7 @@ function initAvatarPreview2(){
 }
 function rebuildAvatarPreviewChar2(){
   if(previewChar2) previewScene2.remove(previewChar2);
-  const vrmUrl = selectedVrmId2 ? (vrmLibrary[selectedVrmId2]||{}).url : null;
+  const vrmUrl = resolveVrmUrl(selectedVrmId2, myVipActiveUntil);
   previewChar2 = buildCharacter(AVATARS[avatarIndex2], levelIndex2, vrmUrl);
   if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
   previewScene2.add(previewChar2);
@@ -969,7 +1056,7 @@ document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
     if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
     if(currentRoom && myChar){
       scene.remove(myChar);
-      const vrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
+      const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
       myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
       myChar.position.set(me.x, 0, me.z);
       scene.add(myChar);
@@ -1089,7 +1176,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 
 document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
 
-let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null;
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null, myVipActiveUntil = null;
 
 auth.onAuthStateChanged(async (user)=>{
   if(user){
@@ -1113,7 +1200,7 @@ auth.onAuthStateChanged(async (user)=>{
       return;
     }
     myId = user.uid;
-    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
+    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null; myVipActiveUntil = profile.vipActiveUntil||null;
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
@@ -1707,7 +1794,7 @@ function updateLabels(){
 function ensureRemoteChar(id, d){
   if(remote[id]) return remote[id];
   const def = AVATARS[d.avatarIndex] || AVATARS[0];
-  const vrmUrl = d.vrmId ? (vrmLibrary[d.vrmId]||{}).url : null;
+  const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
   const group = buildCharacter(def, d.level||0, vrmUrl);
   scene.add(group);
   const labelEl = document.createElement('div');
@@ -1783,6 +1870,7 @@ async function sendChatMessage(text){
   myBubbleText = text; myBubbleUntil = Date.now()+4500;
   try{ await db.ref(`rooms/${currentRoom}/messages`).push(d); }
   catch(err){ console.error('send message error:', err); addFeedMsg(myName, text); addFeedMsg(null, 'a mensagem apareceu só pra você — a sincronização falhou.', true); }
+  db.ref('users/'+myId+'/chatMessageCount').transaction(cur => (cur||0) + 1).catch(()=>{});
 }
 
 async function reportPlayer(id){
@@ -1800,7 +1888,14 @@ async function reportPlayer(id){
   }catch(e){ console.error(e); addFeedMsg(null, 'não consegui enviar a denúncia agora.', true); }
 }
 
-let presenceRef=null, playersRef=null, messagesRef=null, metaRef=null, heartbeatTimer=null;
+let presenceRef=null, playersRef=null, messagesRef=null, metaRef=null, heartbeatTimer=null, playTimeTimer=null;
+async function playTimeTick(){
+  if(!myId || !currentRoom) return;
+  try{
+    await db.ref('users/'+myId+'/totalPlaySeconds').transaction(cur => (cur||0) + 60);
+    await checkAndApplyLevelUp();
+  }catch(e){ console.error('erro no tick de tempo jogado:', e); }
+}
 
 async function cleanupStalePresence(targetRoomId){
   // clear this session's own listeners/presence if it's sitting in a room already
@@ -1867,8 +1962,9 @@ async function enterRoom(id, name){
   });
   resizeRenderer();
   if(myChar) scene.remove(myChar);
-  const myVrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
+  const myVrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
   myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, myVrmUrl);
+  myChar.userData._levelUsed = myLevel;
   scene.add(myChar);
 
   me.x = (Math.random()*10-5); me.z = 6 + Math.random()*6; me.rotY = 0; me.targetRotY = 0;
@@ -1882,7 +1978,7 @@ async function enterRoom(id, name){
   setTimeout(()=>glCanvas.focus(), 60);
 
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
-  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
   try{
     await presenceRef.set(initialData);
     presenceRef.onDisconnect().remove();
@@ -1890,6 +1986,8 @@ async function enterRoom(id, name){
     db.ref('users/'+myId+'/activeRoom').onDisconnect().remove();
   }catch(e){ console.error('presence set error', e); }
   heartbeatTimer = setInterval(pushPresence, 150);
+  playTimeTimer = setInterval(playTimeTick, 60000);
+  checkAndApplyLevelUp();
 
   playersRef = db.ref(`rooms/${id}/players`);
   playersRef.on('value', snap=>{
@@ -1914,6 +2012,7 @@ async function enterRoom(id, name){
 }
 async function leaveRoom(){
   clearInterval(heartbeatTimer);
+  clearInterval(playTimeTimer);
   try{
     if(playersRef) playersRef.off();
     if(messagesRef) messagesRef.off();
