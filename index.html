@@ -97,9 +97,10 @@
   #topbar .rname{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 14px; font-size:12px; backdrop-filter:blur(4px); color:#fff; }
   #topbar .rname b{ color:var(--gold); }
   #topbar-right{ display:flex; gap:8px; }
-  #leaveBtn, #panelBtn{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); color:#fff; border-radius:8px; padding:8px 14px; font-size:12px; cursor:pointer; }
+  #leaveBtn, #panelBtn, #switchMapBtn{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); color:#fff; border-radius:8px; padding:8px 14px; font-size:12px; cursor:pointer; }
   #leaveBtn:hover{ border-color:var(--pink); color:var(--pink); }
   #panelBtn:hover{ border-color:var(--gold); color:var(--gold); }
+  #switchMapBtn:hover{ border-color:var(--nebula-soft); color:var(--nebula-soft); }
   #playerListMini{ position:absolute; top:60px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 12px; font-size:11.5px; color:#fff; max-width:190px; backdrop-filter:blur(4px); max-height:40vh; overflow:auto; }
   #playerListMini .row{ display:flex; align-items:center; gap:6px; margin-top:4px; justify-content:space-between; }
   #playerListMini .row .left{ display:flex; align-items:center; gap:6px; overflow:hidden; }
@@ -227,6 +228,7 @@
     <div id="topbar">
       <div class="rname">você está em <b id="currentRoomName"></b></div>
       <div id="topbar-right">
+        <button id="switchMapBtn" style="display:none;">trocar mapa</button>
         <button id="panelBtn" style="display:none;">painel</button>
         <button id="leaveBtn">← sair da sala</button>
       </div>
@@ -291,6 +293,20 @@
       </div>
       <button class="btn" id="saveAvatarBtn">Salvar personagem</button>
       <div class="errmsg" id="avatarSaveMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="mapSwitchModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Trocar mapa da sala</h2><button id="mapSwitchModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div id="switchMapList" style="display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto;">
+        <div class="empty" style="padding:8px 0;">carregando…</div>
+      </div>
+      <div class="hint">todo mundo que estiver na sala vai recarregar o mapa junto.</div>
+      <button class="btn" id="saveSwitchMapBtn">Salvar e trocar</button>
+      <div class="errmsg" id="switchMapMsg"></div>
     </div>
   </div>
 </div>
@@ -1126,6 +1142,7 @@ function enterLobbyUI(){
   }
   document.getElementById('panelBtnLobby').style.display = isStaff(myRole) ? 'inline-block' : 'none';
   document.getElementById('panelBtn').style.display = isStaff(myRole) ? 'inline-block' : 'none';
+  document.getElementById('switchMapBtn').style.display = canCreateRoom(myRole) ? 'inline-block' : 'none';
 
   const zone = document.getElementById('createRoomZone');
   if(canCreateRoom(myRole)){
@@ -1224,6 +1241,55 @@ async function createRoomHandler(){
   enterRoom(id, name);
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// --- modal de trocar o mapa de uma sala já criada ---
+let selectedSwitchMapId = null;
+const mapSwitchModal = document.getElementById('mapSwitchModal');
+function renderSwitchMapPicker(){
+  const el = document.getElementById('switchMapList');
+  if(!el) return;
+  el.innerHTML = '';
+  const defaultRow = document.createElement('div');
+  defaultRow.className = 'room-item'; defaultRow.style.cursor = 'pointer';
+  if(!selectedSwitchMapId) defaultRow.style.borderColor = 'var(--nebula-soft)';
+  defaultRow.innerHTML = `<div class="rn">Mapa padrão (Nébula)</div>`;
+  defaultRow.onclick = ()=>{ selectedSwitchMapId = null; renderSwitchMapPicker(); };
+  el.appendChild(defaultRow);
+  const ids = Object.keys(mapLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum mapa customizado enviado ainda.';
+    el.appendChild(empty);
+  }
+  ids.forEach(id=>{
+    const item = mapLibrary[id];
+    const row = document.createElement('div');
+    row.className = 'room-item'; row.style.cursor = 'pointer';
+    if(selectedSwitchMapId === id) row.style.borderColor = 'var(--nebula-soft)';
+    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
+    row.onclick = ()=>{ selectedSwitchMapId = id; renderSwitchMapPicker(); };
+    el.appendChild(row);
+  });
+}
+function openMapSwitchModal(){
+  selectedSwitchMapId = currentWorldMapId || null;
+  document.getElementById('switchMapMsg').textContent = '';
+  mapSwitchModal.style.display = 'flex';
+  renderSwitchMapPicker();
+}
+document.getElementById('switchMapBtn').addEventListener('click', openMapSwitchModal);
+document.getElementById('mapSwitchModalClose').addEventListener('click', ()=>{ mapSwitchModal.style.display='none'; });
+document.getElementById('saveSwitchMapBtn').addEventListener('click', async ()=>{
+  if(!currentRoom) return;
+  const msgEl = document.getElementById('switchMapMsg');
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'trocando…';
+  try{
+    await db.ref('rooms/'+currentRoom+'/meta/mapId').set(selectedSwitchMapId || null);
+    mapSwitchModal.style.display = 'none';
+  }catch(e){
+    console.error('erro ao trocar mapa da sala:', e);
+    msgEl.style.color = 'var(--danger)'; msgEl.textContent = 'erro ao trocar (veja o Console/F12).';
+  }
+});
 
 let currentRoom = null;
 let currentWorldMapId = undefined; // undefined = mundo ainda não construído
@@ -1734,7 +1800,7 @@ async function reportPlayer(id){
   }catch(e){ console.error(e); addFeedMsg(null, 'não consegui enviar a denúncia agora.', true); }
 }
 
-let presenceRef=null, playersRef=null, messagesRef=null, heartbeatTimer=null;
+let presenceRef=null, playersRef=null, messagesRef=null, metaRef=null, heartbeatTimer=null;
 
 async function cleanupStalePresence(targetRoomId){
   // clear this session's own listeners/presence if it's sitting in a room already
@@ -1756,6 +1822,16 @@ async function cleanupStalePresence(targetRoomId){
   }catch(e){ console.error('cleanup stale room error', e); }
 }
 
+function applyRoomMap(mapId){
+  if(scene && currentWorldMapId === mapId) return; // já é o mapa certo, não precisa reconstruir
+  const mapUrl = mapId ? (mapLibrary[mapId]||{}).url : null;
+  buildWorld(mapUrl);
+  currentWorldMapId = mapId;
+  // a cena é recriada do zero pelo buildWorld — precisa recolocar os personagens que já existiam
+  if(myChar) scene.add(myChar);
+  Object.values(remote).forEach(r=>{ if(r && r.group) scene.add(r.group); });
+  resizeRenderer();
+}
 async function enterRoom(id, name){
   const count = await countRoomPlayers(id);
   if(count >= ROOM_CAPACITY){ alert('Essa sala está cheia (50/50). Tenta outra ou espera uma vaga abrir.'); return; }
@@ -1777,11 +1853,18 @@ async function enterRoom(id, name){
     const metaSnap = await db.ref('rooms/'+id+'/meta').once('value');
     roomMapId = (metaSnap.val()||{}).mapId || null;
   }catch(e){ console.error('erro ao ler mapa da sala:', e); }
-  if(!scene || currentWorldMapId !== roomMapId){
-    const roomMapUrl = roomMapId ? (mapLibrary[roomMapId]||{}).url : null;
-    buildWorld(roomMapUrl);
-    currentWorldMapId = roomMapId;
-  }
+  applyRoomMap(roomMapId);
+  metaRef = db.ref('rooms/'+id+'/meta');
+  metaRef.on('value', snap=>{
+    const newMapId = (snap.val()||{}).mapId || null;
+    if(currentRoom !== id) return; // já saiu dessa sala, ignora
+    if(!scene || currentWorldMapId === newMapId) return;
+    const hint = document.getElementById('loadingHint');
+    hint.textContent = 'trocando o mapa da sala…';
+    hint.style.display = 'flex';
+    applyRoomMap(newMapId);
+    hint.style.display = 'none';
+  });
   resizeRenderer();
   if(myChar) scene.remove(myChar);
   const myVrmUrl = myVrmId ? (vrmLibrary[myVrmId]||{}).url : null;
@@ -1834,10 +1917,11 @@ async function leaveRoom(){
   try{
     if(playersRef) playersRef.off();
     if(messagesRef) messagesRef.off();
+    if(metaRef) metaRef.off();
     if(presenceRef){ await presenceRef.onDisconnect().cancel(); await presenceRef.remove(); }
     await db.ref('users/'+myId+'/activeRoom').set(null);
   }catch(e){ console.error('leave room error', e); }
-  presenceRef=null; playersRef=null; messagesRef=null;
+  presenceRef=null; playersRef=null; messagesRef=null; metaRef=null;
   currentRoom = null;
   document.getElementById('room-screen').style.display='none';
   document.getElementById('lobby-screen').style.display='flex';
