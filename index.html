@@ -543,14 +543,19 @@ async function checkAndApplyLevelUp(){
     myVipActiveUntil = profile.vipActiveUntil || null;
     const lvBadge = document.getElementById('whoLevel');
     if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
-    if(currentRoom && myChar && newLevel !== myChar.userData._levelUsed){
+    const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
+    // reconstrói o personagem (e avisa os outros jogadores) sempre que o LEVEL mudar
+    // OU quando o status de VIP mudar o resultado do VRM (ativou/expirou/foi concedido) —
+    // antes isso só rodava junto com mudança de level, então ativar VIP sem subir de level
+    // nunca atualizava o modelo 3D nem o presence dos outros jogadores.
+    if(currentRoom && myChar && (newLevel !== myChar.userData._levelUsed || vrmUrl !== myChar.userData._vrmUrlUsed)){
       scene.remove(myChar);
-      const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
       myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
       myChar.userData._levelUsed = myLevel;
+      myChar.userData._vrmUrlUsed = vrmUrl;
       myChar.position.set(me.x, 0, me.z);
       scene.add(myChar);
-      if(presenceRef) presenceRef.update({level:myLevel, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
+      if(presenceRef) presenceRef.update({level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
     }
   }catch(e){ console.error('erro ao checar level:', e); }
 }
@@ -1160,9 +1165,11 @@ document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
       scene.remove(myChar);
       const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
       myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
+      myChar.userData._levelUsed = myLevel;
+      myChar.userData._vrmUrlUsed = vrmUrl;
       myChar.position.set(me.x, 0, me.z);
       scene.add(myChar);
-      if(presenceRef) presenceRef.update({vrmId: myVrmId}).catch(()=>{});
+      if(presenceRef) presenceRef.update({vrmId: myVrmId, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
     }
     msg.style.color = 'var(--ok)'; msg.textContent = 'personagem salvo!';
     setTimeout(()=>{ avatarModal.style.display='none'; preview2Active = false; }, 700);
@@ -1899,6 +1906,8 @@ function ensureRemoteChar(id, d){
   const def = AVATARS[d.avatarIndex] || AVATARS[0];
   const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
   const group = buildCharacter(def, d.level||0, vrmUrl);
+  group.userData._levelUsed = d.level||0;
+  group.userData._vrmUrlUsed = vrmUrl;
   scene.add(group);
   const labelEl = document.createElement('div');
   labelEl.className = 'plabel';
@@ -2070,6 +2079,7 @@ async function enterRoom(id, name){
   const myVrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
   myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, myVrmUrl);
   myChar.userData._levelUsed = myLevel;
+  myChar.userData._vrmUrlUsed = myVrmUrl;
   scene.add(myChar);
 
   me.x = (Math.random()*10-5); me.z = 6 + Math.random()*6; me.rotY = 0; me.targetRotY = 0;
@@ -2103,6 +2113,20 @@ async function enterRoom(id, name){
       const d = val[pid];
       const r = ensureRemoteChar(pid, d);
       r.targetX = d.x; r.targetZ = d.z; r.targetRotY = d.rotY||0; r.updatedAt = d.updatedAt;
+      // se o level, o personagem VRM escolhido, ou o status de VIP dela mudou (ex: acabou de ganhar/comprar VIP),
+      // reconstrói o modelo 3D — sem isso o avatar VRM só aparecia se a pessoa saísse e entrasse de novo na sala.
+      const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
+      if(r.group.userData._levelUsed !== (d.level||0) || r.group.userData._vrmUrlUsed !== vrmUrl){
+        scene.remove(r.group);
+        const def = AVATARS[d.avatarIndex] || AVATARS[0];
+        const newGroup = buildCharacter(def, d.level||0, vrmUrl);
+        newGroup.userData._levelUsed = d.level||0;
+        newGroup.userData._vrmUrlUsed = vrmUrl;
+        newGroup.position.copy(r.group.position);
+        newGroup.rotation.copy(r.group.rotation);
+        scene.add(newGroup);
+        r.group = newGroup;
+      }
     });
     updatePlayerListUI();
   });
