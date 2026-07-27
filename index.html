@@ -428,10 +428,8 @@ function levelInfo(level){ return LEVELS[Math.max(0, Math.min(level|0, LEVELS.le
 // Cada 60s conectado numa sala soma 60 em users/{uid}/totalPlaySeconds (ver playTimeTick()).
 const DAY_SECONDS = 86400;
 const VIP_TIER_RANK = {'1week':1, '1month':2, '5months':3, '1year':4, '2years':5};
-// quantas mensagens de chat são necessárias pra cada level 8/9/10 — ajuste à vontade
-const CHAT_THRESHOLD_LV8 = 300;
-const CHAT_THRESHOLD_LV9 = 600;
-const CHAT_THRESHOLD_LV10 = 1000;
+// quantas mensagens de chat contam como "bastante ativo" — ajuste esse número à vontade
+const CHAT_ACTIVE_THRESHOLD = 300;
 
 function hasActiveVIP(vipActiveUntil){ return !!vipActiveUntil && vipActiveUntil > Date.now(); }
 function resolveVrmUrl(vrmId, vipActiveUntil){
@@ -452,7 +450,7 @@ function boughtAnyVipWithinDays(profile, days){
 // calcula o maior level que o perfil JÁ merece pelos critérios — nunca reduz o level atual sozinho
 function computeEligibleLevel(profile){
   const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
-  const chatCount = profile.chatMessageCount||0;
+  const activeChat = (profile.chatMessageCount||0) >= CHAT_ACTIVE_THRESHOLD;
   const activeVipTierRank = hasActiveVIP(profile.vipActiveUntil) ? (VIP_TIER_RANK[profile.vipTier]||0) : 0;
   let lvl = 0;
   if(days >= 1)   lvl = 1;
@@ -462,9 +460,9 @@ function computeEligibleLevel(profile){
   if(days >= 20 && everBoughtTierOrHigher(profile,'1month')) lvl = 5;
   if(days >= 90 && activeVipTierRank >= VIP_TIER_RANK['1month']) lvl = 6;
   if(days >= 365) lvl = Math.max(lvl, 7);
-  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV8  && everBoughtTierOrHigher(profile,'5months')) lvl = 8;
-  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV9  && everBoughtTierOrHigher(profile,'1year'))   lvl = 9;
-  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV10 && everBoughtTierOrHigher(profile,'2years'))  lvl = 10;
+  if(lvl >= 7 && activeChat && everBoughtTierOrHigher(profile,'5months')) lvl = 8;
+  if(lvl >= 7 && activeChat && everBoughtTierOrHigher(profile,'1year'))   lvl = 9;
+  if(lvl >= 7 && activeChat && everBoughtTierOrHigher(profile,'2years'))  lvl = 10;
   return lvl;
 }
 // roda depois de cada tick de tempo jogado (e pode ser chamado a qualquer momento) —
