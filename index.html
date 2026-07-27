@@ -2265,7 +2265,7 @@ async function renderRolesTab(){
     const row = document.createElement('div'); row.className='prow';
     const roleInfo = ROLES[u.role]||ROLES.player;
 
-    let vipSel, vipBtn;
+    let vipSel, vipBtn, vipRemoveBtn;
     if(canVip){
       vipSel = document.createElement('select');
       Object.keys(VIP_NAMES).forEach(tier=>{ const o=document.createElement('option'); o.value=tier; o.textContent='VIP '+VIP_NAMES[tier]; vipSel.appendChild(o); });
@@ -2281,6 +2281,21 @@ async function renderRolesTab(){
           vipBtn.textContent='✓ concedido';
           setTimeout(()=>{ vipBtn.textContent='conceder VIP'; }, 1500);
         }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; }
+      });
+
+      vipRemoveBtn = document.createElement('button'); vipRemoveBtn.className='mini-btn warn'; vipRemoveBtn.textContent='remover VIP';
+      vipRemoveBtn.addEventListener('click', async ()=>{
+        if(!confirm(`Remover o VIP de ${u.name||'este usuário'}?`)) return;
+        vipRemoveBtn.textContent='removendo…';
+        try{
+          const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-revoke-vip', {
+            method:'POST', headers: edgeFunctionHeaders(),
+            body: JSON.stringify({targetUid: uid, revokedBy: myId})
+          });
+          if(!resp.ok) throw new Error('falha na requisição');
+          vipRemoveBtn.textContent='✓ removido';
+          setTimeout(()=>{ vipRemoveBtn.textContent='remover VIP'; }, 1500);
+        }catch(e){ console.error('erro ao remover vip:', e); vipRemoveBtn.textContent='erro'; }
       });
     }
 
@@ -2307,14 +2322,14 @@ async function renderRolesTab(){
       const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
       right.appendChild(sel); right.appendChild(btn);
       if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
-      if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); }
+      if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); right.appendChild(vipRemoveBtn); }
       row.appendChild(right);
     } else {
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
       if(canLevel || canVip){
         const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
         if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
-        if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); }
+        if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); right.appendChild(vipRemoveBtn); }
         row.appendChild(right);
       }
     }
