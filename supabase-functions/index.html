@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nébula — mundo 3D pra andar e conversar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#0a0e27; --bg-panel:#12183a; --bg-panel-2:#1a2150; --line:#2b3470;
+    --nebula:#8b5cf6; --nebula-soft:#a78bfa; --gold:#ffc857; --pink:#ff6fa5;
+    --text:#eef0ff; --text-dim:#9aa3d6; --danger:#ff6b6b; --ok:#4ade80;
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg-deep); color:var(--text); font-family:'Space Grotesk', sans-serif; overflow:hidden; }
+  .pixel{ font-family:'Press Start 2P', monospace; }
+  #stars{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+  #app{ position:relative; z-index:1; height:100%; width:100%; display:flex; align-items:center; justify-content:center; }
+  .screen{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; animation: fadeIn .5s ease; overflow:auto; padding:20px 0; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+  .card{
+    background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2));
+    border:2px solid var(--line); border-radius:14px; padding:32px 34px;
+    width:min(440px, 92vw); box-shadow: 0 0 0 1px rgba(139,92,246,.08), 0 30px 60px -20px rgba(0,0,0,.6);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+  .brand .dot{ width:10px; height:10px; border-radius:2px; background:var(--gold); box-shadow:0 0 12px var(--gold); animation: pulse 2s infinite ease-in-out; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.4;} }
+  .brand h1{ font-size:13px; letter-spacing:1px; margin:0; color:var(--gold); }
+  label{ display:block; font-size:11px; color:var(--text-dim); margin:16px 0 8px; letter-spacing:.5px; text-transform:uppercase; }
+  input[type=text], input[type=email], input[type=password]{
+    width:100%; padding:12px 14px; border-radius:8px; background:var(--bg-deep); border:2px solid var(--line);
+    color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:15px; outline:none; transition:border-color .15s;
+  }
+  input:focus{ border-color:var(--nebula-soft); }
+  .tabs{ display:flex; gap:6px; background:var(--bg-deep); border-radius:9px; padding:4px; margin-bottom:4px; }
+  .tab-btn{ flex:1; padding:9px; border:none; border-radius:7px; background:transparent; color:var(--text-dim); font-size:12.5px; font-weight:700; cursor:pointer; }
+  .tab-btn.active{ background:var(--nebula); color:#fff; }
+  .avatar-picker{ display:flex; align-items:center; justify-content:center; gap:14px; margin-top:6px; }
+  .arrow-btn{
+    width:38px; height:38px; border-radius:50%; border:2px solid var(--line); background:var(--bg-deep); color:var(--text);
+    font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:border-color .15s, transform .1s; flex:none;
+  }
+  .arrow-btn:hover{ border-color:var(--nebula-soft); color:var(--nebula-soft); }
+  .arrow-btn:active{ transform:scale(.92); }
+  .avatar-stage{
+    width:150px; height:170px; border-radius:12px;
+    background:radial-gradient(circle at 50% 30%, rgba(139,92,246,.18), transparent 70%), var(--bg-deep);
+    border:2px solid var(--line); overflow:hidden; margin:0 auto;
+  }
+  #avatarPreview{ width:100%; height:100%; display:block; }
+  .avatar-name{ text-align:center; margin-top:10px; font-size:12.5px; font-weight:700; color:var(--gold); letter-spacing:.4px; }
+  .avatar-dots{ display:flex; justify-content:center; gap:5px; margin-top:8px; }
+  .avatar-dots span{ width:5px; height:5px; border-radius:50%; background:var(--line); }
+  .avatar-dots span.on{ background:var(--nebula-soft); }
+  .btn{
+    margin-top:20px; width:100%; padding:13px; border-radius:9px; border:none; background:var(--nebula); color:#fff;
+    font-weight:700; font-size:14px; cursor:pointer; letter-spacing:.3px; transition:background .15s, transform .1s;
+  }
+  .btn:hover{ background:var(--nebula-soft); } .btn:active{ transform:scale(.98); } .btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn.secondary{ background:transparent; border:1px solid var(--line); color:var(--text-dim); }
+  .btn.danger{ background:var(--danger); }
+  .hint{ font-size:11px; color:var(--text-dim); margin-top:10px; line-height:1.5; text-align:center; }
+  .errmsg{ font-size:12px; color:var(--danger); margin-top:10px; text-align:center; min-height:14px; }
+
+  .lobby-wrap{ width:min(680px, 94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; padding:26px 30px 24px; overflow:auto; }
+  .lobby-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:8px;}
+  .lobby-head h1{ font-size:14px; color:var(--gold); margin:0;}
+  .who{ font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:8px;}
+  .who b{ color:var(--text); }
+  #whoAvatar{ width:16px; height:16px; border-radius:4px; display:inline-block; }
+  .role-badge{ font-size:9.5px; padding:2px 7px; border-radius:20px; font-weight:700; letter-spacing:.3px; }
+  .head-actions{ display:flex; gap:8px; }
+  .head-actions button{ font-size:11px; padding:6px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg-deep); color:var(--text-dim); cursor:pointer; }
+  .head-actions button:hover{ border-color:var(--nebula-soft); color:var(--text); }
+  .section-title{ font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin:22px 0 10px; display:flex; align-items:center; gap:8px; }
+  .section-title::after{ content:''; flex:1; height:1px; background:var(--line); }
+  .create-row{ display:flex; gap:10px; }
+  .create-row input{ flex:1; }
+  .create-row .btn{ width:auto; margin-top:0; padding:0 18px; white-space:nowrap; }
+  .locked-note{ font-size:12px; color:var(--text-dim); background:var(--bg-deep); border:1px dashed var(--line); border-radius:9px; padding:12px 14px; }
+  .room-list{ display:flex; flex-direction:column; gap:8px; }
+  .room-item{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-deep); border:1px solid var(--line); border-radius:9px; padding:12px 14px; cursor:pointer; transition:border-color .12s, transform .1s; }
+  .room-item.full{ opacity:.5; cursor:not-allowed; }
+  .room-item:not(.full):hover{ border-color:var(--nebula-soft); transform:translateX(2px); }
+  .room-item .rn{ font-weight:600; font-size:14px; }
+  .room-item .rm{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+  .room-item .go{ font-size:11px; color:var(--gold); }
+  .room-item .cap{ font-size:10.5px; color:var(--text-dim); }
+  .empty{ font-size:12px; color:var(--text-dim); padding:14px 0; text-align:center; }
+
+  #room-screen{ display:none; width:100%; height:100%; position:relative; background:#7ec8e3; }
+  #gl{ position:absolute; inset:0; width:100%; height:100%; display:block; outline:none; }
+  #loadingHint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; background:rgba(10,14,39,.4); z-index:20; text-align:center; padding:20px; }
+  #topbar{ position:absolute; top:14px; left:18px; right:18px; display:flex; align-items:center; justify-content:space-between; z-index:5; }
+  #topbar .rname{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 14px; font-size:12px; backdrop-filter:blur(4px); color:#fff; }
+  #topbar .rname b{ color:var(--gold); }
+  #topbar-right{ display:flex; gap:8px; }
+  #leaveBtn, #panelBtn, #switchMapBtn{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); color:#fff; border-radius:8px; padding:8px 14px; font-size:12px; cursor:pointer; }
+  #leaveBtn:hover{ border-color:var(--pink); color:var(--pink); }
+  #panelBtn:hover{ border-color:var(--gold); color:var(--gold); }
+  #switchMapBtn:hover{ border-color:var(--nebula-soft); color:var(--nebula-soft); }
+  #playerListMini{ position:absolute; top:60px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 12px; font-size:11.5px; color:#fff; max-width:190px; backdrop-filter:blur(4px); max-height:40vh; overflow:auto; }
+  #playerListMini .row{ display:flex; align-items:center; gap:6px; margin-top:4px; justify-content:space-between; }
+  #playerListMini .row .left{ display:flex; align-items:center; gap:6px; overflow:hidden; }
+  #playerListMini .sw{ width:8px; height:8px; border-radius:2px; flex:none; }
+  #playerListMini .rep{ background:none; border:none; color:#ff8a8a; cursor:pointer; font-size:11px; flex:none; }
+  #chatFeed{ position:absolute; bottom:70px; left:18px; z-index:5; width:min(320px, 60vw); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  #chatFeed .fmsg{ background:rgba(10,14,39,.65); border-radius:6px; padding:5px 9px; font-size:12px; color:#fff; backdrop-filter:blur(3px); animation: fadeIn .2s ease; }
+  #chatFeed .fmsg b{ color:var(--gold); }
+  #chatFeed .fmsg.system{ color:#cfd4ff; font-style:italic; }
+  #controlsHint{ position:absolute; bottom:14px; right:18px; z-index:5; background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:7px 12px; font-size:10.5px; color:#e6e9ff; }
+  #chatInputWrap{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:10; display:none; background:rgba(10,14,39,.85); border:2px solid var(--nebula-soft); border-radius:10px; padding:8px; width:min(420px, 80vw); gap:6px; align-items:center; }
+  #chatInputWrap input{ flex:1; background:transparent; border:none; outline:none; color:#fff; font-size:14px; font-family:inherit; padding:6px 10px; min-width:0; }
+  #chatSendBtn{ background:var(--nebula); border:none; color:#fff; border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; flex:none; }
+  #chatOpenBtn{
+    position:absolute; bottom:14px; right:150px; z-index:5; width:48px; height:48px; border-radius:50%;
+    background:var(--nebula); border:2px solid rgba(255,255,255,.25); color:#fff; font-size:20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.35);
+  }
+  #playerLabels{ position:absolute; inset:0; z-index:4; pointer-events:none; overflow:hidden; }
+  .plabel{ position:absolute; transform:translate(-50%,-100%); pointer-events:none; text-align:center; white-space:nowrap; }
+  .plabel .nm{ font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.8); font-weight:600; }
+  .plabel .bub{ background:rgba(10,14,39,.9); border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 9px; font-size:12px; color:#fff; margin-bottom:4px; max-width:180px; white-space:normal; }
+  #dpad{ position:absolute; bottom:14px; left:18px; z-index:5; width:120px; height:120px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; }
+  .dpad-btn{ background:rgba(10,14,39,.6); border:1px solid rgba(255,255,255,.2); color:#fff; border-radius:8px; font-size:14px; cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:center; }
+  .dpad-btn:active, .dpad-btn.pressed{ background:var(--nebula); border-color:var(--nebula-soft); }
+  .dp-up{ grid-column:2; grid-row:1; } .dp-left{ grid-column:1; grid-row:2; } .dp-down{ grid-column:2; grid-row:3; } .dp-right{ grid-column:3; grid-row:2; }
+
+  #panelModal{ display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center; }
+  #avatarModal{ display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center; }
+  #avatarBox{ width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; }
+  #panelBox{ width:min(680px,94vw); max-height:82vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; }
+  #panelHead{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  #panelHead h2{ font-size:13px; color:var(--gold); margin:0; }
+  .panelHead{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .panelHead h2{ font-size:13px; color:var(--gold); margin:0; }
+  #panelClose{ background:none; border:none; color:var(--text-dim); font-size:20px; cursor:pointer; line-height:1; }
+  #panelTabs{ display:flex; gap:6px; padding:12px 20px 0; }
+  #panelTabs button{ padding:8px 14px; border:none; border-radius:7px 7px 0 0; background:var(--bg-deep); color:var(--text-dim); font-size:12px; cursor:pointer; }
+  #panelTabs button.active{ background:var(--nebula); color:#fff; }
+  #panelBody{ padding:16px 20px 20px; overflow:auto; flex:1; }
+  .prow{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-deep); border:1px solid var(--line); border-radius:9px; padding:10px 12px; margin-bottom:8px; }
+  .prow .info{ font-size:12.5px; }
+  .prow .info .sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+  .prow select{ background:var(--bg-panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:12px; }
+  .prow .mini-btn{ background:var(--nebula); border:none; color:#fff; border-radius:6px; padding:6px 10px; font-size:11.5px; cursor:pointer; }
+  .prow .mini-btn.ok{ background:var(--ok); }
+  .prow .mini-btn.warn{ background:var(--danger); }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div id="app">
+
+  <div class="screen" id="auth-screen">
+    <div class="card">
+      <div class="brand"><div class="dot"></div><h1 class="pixel">NÉBULA</h1></div>
+
+      <button class="btn secondary" id="googleBtn" type="button" style="margin-top:0;">Continuar com Google</button>
+      <div class="hint" style="margin:14px 0 4px;">ou use e-mail e senha</div>
+
+      <div class="tabs">
+        <button class="tab-btn active" id="tabRegister" type="button">Cadastrar</button>
+        <button class="tab-btn" id="tabLogin" type="button">Entrar</button>
+      </div>
+
+      <div id="registerForm">
+        <label for="regName">Seu nome</label>
+        <input type="text" id="regName" maxlength="16" placeholder="Como querem te chamar?">
+        <div id="emailPassFields">
+          <label for="regEmail">E-mail</label>
+          <input type="email" id="regEmail" placeholder="seu@email.com">
+          <label for="regPass">Senha</label>
+          <input type="password" id="regPass" placeholder="mínimo 6 caracteres">
+        </div>
+        <label>Escolha seu personagem</label>
+        <div class="avatar-picker">
+          <button class="arrow-btn" id="prevAvatar" type="button">&#8592;</button>
+          <div class="avatar-stage"><canvas id="avatarPreview"></canvas></div>
+          <button class="arrow-btn" id="nextAvatar" type="button">&#8594;</button>
+        </div>
+        <div class="avatar-name" id="avatarName">—</div>
+        <div class="avatar-dots" id="avatarDots"></div>
+        <button class="btn" id="registerBtn">Criar conta e entrar</button>
+      </div>
+
+      <div id="loginForm" style="display:none;">
+        <label for="logEmail">E-mail</label>
+        <input type="email" id="logEmail" placeholder="seu@email.com">
+        <label for="logPass">Senha</label>
+        <input type="password" id="logPass" placeholder="sua senha">
+        <button class="btn" id="loginBtn">Entrar</button>
+      </div>
+
+      <div class="errmsg" id="authError"></div>
+      <div class="hint">Ande com WASD ou as setas. Aperte Enter pra abrir o chat.</div>
+    </div>
+  </div>
+
+  <div class="screen" id="lobby-screen" style="display:none;">
+    <div class="lobby-wrap">
+      <div class="lobby-head">
+        <h1 class="pixel">SALAS</h1>
+        <div class="head-actions">
+          <button id="changeAvatarBtn">trocar personagem</button>
+          <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
+          <button id="panelBtnLobby" style="display:none;">painel</button>
+          <button id="signOutBtn">sair da conta</button>
+        </div>
+      </div>
+      <div class="who"><span id="whoAvatar"></span> oi, <b id="who-name"></b> <span class="role-badge" id="whoRole"></span> <span class="role-badge" id="whoLevel" style="background:#8b5cf633;color:var(--nebula-soft);"></span></div>
+
+      <div class="section-title">criar sala</div>
+      <div id="createRoomZone"></div>
+
+      <div class="section-title">salas abertas</div>
+      <div class="room-list" id="roomList"><div class="empty">carregando…</div></div>
+    </div>
+  </div>
+
+  <div id="room-screen">
+    <canvas id="gl" tabindex="0"></canvas>
+    <div id="playerLabels"></div>
+    <div id="loadingHint">carregando o mundo…</div>
+    <div id="topbar">
+      <div class="rname">você está em <b id="currentRoomName"></b></div>
+      <div id="topbar-right">
+        <button id="switchMapBtn" style="display:none;">trocar mapa</button>
+        <button id="panelBtn" style="display:none;">painel</button>
+        <button id="leaveBtn">← sair da sala</button>
+      </div>
+    </div>
+    <div id="playerListMini">quem está aqui (<span id="playerCount">0</span>/50)<div id="playerListRows"></div></div>
+    <div id="chatFeed"></div>
+    <div id="controlsHint">WASD para andar · Enter para conversar</div>
+    <button type="button" id="chatOpenBtn" title="abrir chat">💬</button>
+    <div id="dpad">
+      <button type="button" class="dpad-btn dp-up" data-key="w">▲</button>
+      <button type="button" class="dpad-btn dp-left" data-key="a">◀</button>
+      <button type="button" class="dpad-btn dp-down" data-key="s">▼</button>
+      <button type="button" class="dpad-btn dp-right" data-key="d">▶</button>
+    </div>
+    <div id="chatInputWrap">
+      <input type="text" id="chatInput" maxlength="140" placeholder="Diga algo…" autocomplete="off">
+      <button type="button" id="chatSendBtn">Enviar</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="panelModal">
+  <div id="panelBox">
+    <div id="panelHead"><h2>Painel da equipe</h2><button id="panelClose">×</button></div>
+    <div id="panelTabs"></div>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
+<div id="avatarModal">
+  <div id="avatarBox">
+    <div class="panelHead"><h2>Trocar personagem</h2><button id="avatarModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="avatar-picker">
+        <button class="arrow-btn" id="prevAvatar2" type="button">&#8592;</button>
+        <div class="avatar-stage"><canvas id="avatarPreview2"></canvas></div>
+        <button class="arrow-btn" id="nextAvatar2" type="button">&#8594;</button>
+      </div>
+      <div class="avatar-name" id="avatarName2">—</div>
+      <div class="avatar-dots" id="avatarDots2"></div>
+      <div style="margin-top:18px; border-top:1px dashed var(--line); padding-top:16px;">
+        <label>Personagens VRM disponíveis</label>
+        <div class="hint" style="margin-top:2px;">Só quem tem VIP ativo consegue usar um personagem VRM — sem VIP, o jogo usa o avatar padrão mesmo que você escolha um aqui.</div>
+        <div id="vrmLibraryList" style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow:auto; margin-top:8px;">
+          <div class="empty" style="padding:8px 0;">carregando…</div>
+        </div>
+        <div id="vrmDevUpload" style="display:none; margin-top:12px;">
+          <label>Adicionar novo personagem VRM (só devs)</label>
+          <input type="text" id="vrmNameInput" placeholder="nome do personagem" style="margin-top:6px;">
+          <input type="file" id="vrmFileInput" accept=".vrm" style="display:none;">
+          <button class="btn secondary" id="vrmUploadBtn" type="button" style="margin-top:8px;">Escolher arquivo .vrm e enviar</button>
+        </div>
+        <div class="errmsg" id="vrmLoadMsg"></div>
+      </div>
+      <div id="levelTestZone" style="display:none;">
+        <label style="margin-top:18px;">Nível / aura (teste)</label>
+        <div class="avatar-picker" style="margin-top:0;">
+          <button class="arrow-btn" id="prevLevel2" type="button">&#8592;</button>
+          <div style="flex:1; text-align:center; font-size:13px; font-weight:700; color:var(--gold);" id="levelName2">—</div>
+          <button class="arrow-btn" id="nextLevel2" type="button">&#8594;</button>
+        </div>
+      </div>
+      <button class="btn" id="saveAvatarBtn">Salvar personagem</button>
+      <div class="errmsg" id="avatarSaveMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="vipModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>✨ VIP Nébula</h2><button id="vipModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="hint" style="margin-bottom:10px;">Com VIP ativo você pode usar personagens VRM de verdade no jogo. Escolhe um plano abaixo — vai abrir a página de pagamento do Mercado Pago.</div>
+      <div id="vipStatusLine" style="margin-bottom:12px; font-size:13px; color:var(--nebula-soft);"></div>
+      <div id="vipPlansList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      <div class="errmsg" id="vipBuyMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="mapSwitchModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Trocar mapa da sala</h2><button id="mapSwitchModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div id="switchMapList" style="display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto;">
+        <div class="empty" style="padding:8px 0;">carregando…</div>
+      </div>
+      <div class="hint">todo mundo que estiver na sala vai recarregar o mapa junto.</div>
+      <button class="btn" id="saveSwitchMapBtn">Salvar e trocar</button>
+      <div class="errmsg" id="switchMapMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDAaChRHWcp2FMhLqsQCOSHBzcGKf0HXsk",
+  authDomain: "galaxy2-b7a2f.firebaseapp.com",
+  databaseURL: "https://galaxy2-b7a2f-default-rtdb.firebaseio.com",
+  projectId: "galaxy2-b7a2f",
+  storageBucket: "galaxy2-b7a2f.firebasestorage.app",
+  messagingSenderId: "749595164106",
+  appId: "1:749595164106:web:b63f1d04220fe5d2d56333"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const auth = firebase.auth();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Supabase é usado só pra guardar os arquivos .vrm (o resto do jogo continua no Firebase)
+const supabaseClient = window.supabase.createClient(
+  'https://jsviqlxzjrlhvmubxwep.supabase.co',
+  'sb_publishable_YyyANARR5-cTwVobklEnVg_6FKINrce'
+);
+const EDGE_FUNCTIONS_BASE = 'https://jsviqlxzjrlhvmubxwep.supabase.co/functions/v1';
+const SUPABASE_ANON_KEY = 'sb_publishable_YyyANARR5-cTwVobklEnVg_6FKINrce';
+function edgeFunctionHeaders(){
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+  };
+}
+const VIP_PRICES = {'1week':4.90, '1month':14.90, '5months':69.90, '1year':146.90, '2years':268.90};
+const VIP_NAMES = {'1week':'1 semana', '1month':'1 mês', '5months':'5 meses', '1year':'1 ano', '2years':'2 anos'};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/utils/SkeletonUtils.js"></script>
+<script>
+(function(){
+  const c = document.getElementById('stars');
+  const ctx = c.getContext('2d');
+  let stars = [];
+  function resize(){
+    c.width = window.innerWidth; c.height = window.innerHeight;
+    stars = Array.from({length:140}, ()=>({ x:Math.random()*c.width, y:Math.random()*c.height, r:Math.random()*1.4+0.2, s:Math.random()*0.5+0.15, p:Math.random()*Math.PI*2 }));
+  }
+  window.addEventListener('resize', resize); resize();
+  function loop(t){
+    ctx.clearRect(0,0,c.width,c.height);
+    for(const st of stars){
+      const alpha = 0.35 + 0.5*Math.abs(Math.sin(t*0.001*st.s + st.p));
+      ctx.fillStyle = `rgba(180,190,255,${alpha})`;
+      ctx.fillRect(st.x, st.y, st.r*2, st.r*2);
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+
+const ROLES = {
+  dev_senior:    {label:'Desenvolvedor Sênior', rank:100, color:'#ff6b6b'},
+  dev:           {label:'Desenvolvedor',        rank:90,  color:'#ff9e6b'},
+  gm:            {label:'GM',                   rank:70,  color:'#ffc857'},
+  mod_senior:    {label:'Moderador Sênior',      rank:60,  color:'#a78bfa'},
+  mod:           {label:'Moderador',             rank:50,  color:'#8b5cf6'},
+  mentor_senior: {label:'Mentor Sênior',          rank:40,  color:'#4ade80'},
+  mentor:        {label:'Mentor',                 rank:30,  color:'#38bdf8'},
+  player:        {label:'Jogador',                rank:0,   color:'#9aa3d6'}
+};
+function rankOf(role){ return (ROLES[role]||ROLES.player).rank; }
+function canCreateRoom(role){ return rankOf(role) >= ROLES.gm.rank; }
+function canSeeRolesTab(role){ return rankOf(role) >= ROLES.gm.rank; }
+function canGrantVip(role){ return rankOf(role) >= ROLES.gm.rank; } // dev e GM podem dar VIP manual
+function canSeeReportsTab(role){ return rankOf(role) >= ROLES.mod.rank; }
+function canSeeNewUsersTab(role){ return rankOf(role) >= ROLES.mentor.rank; }
+function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
+function canTestAura(role){ return rankOf(role) >= ROLES.dev.rank; }
+function canManageVRM(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos personagens VRM pro jogo todo
+function canManageMaps(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos mapas pro jogo todo
+function assignableRoles(actorRole, targetCurrentRole){
+  if(actorRole === 'dev_senior') return Object.keys(ROLES);
+  if(actorRole === 'dev'){
+    if(rankOf(targetCurrentRole) >= ROLES.dev.rank) return [];
+    return Object.keys(ROLES).filter(r => rankOf(r) < ROLES.dev.rank);
+  }
+  if(actorRole === 'gm'){
+    if(rankOf(targetCurrentRole) >= ROLES.gm.rank) return [];
+    return Object.keys(ROLES).filter(r => rankOf(r) <= ROLES.mod_senior.rank);
+  }
+  return [];
+}
+
+const AVATARS = [
+  {name:'Programador', skin:0xf0c49c, hair:0x22262f, outfit:0x2f3b63, outfit2:0x1c2544},
+  {name:'Sonhadora',   skin:0xf7d3b0, hair:0xe8c15a, outfit:0xeaeaf5, outfit2:0xc9b6e8},
+  {name:'Roqueiro',    skin:0xd99a6c, hair:0x3a2418, outfit:0x8b5cf6, outfit2:0x5b3a9e},
+  {name:'Skatista',    skin:0xf0c49c, hair:0x7a4a2b, outfit:0xff6fa5, outfit2:0xc94a7d},
+  {name:'Viajante',    skin:0xc98857, hair:0x101010, outfit:0xffc857, outfit2:0xc99a2f},
+  {name:'Artista',     skin:0xf7d3b0, hair:0xb23b5a, outfit:0x38bdf8, outfit2:0x1f7fae},
+  {name:'Ciclista',    skin:0xe0aa78, hair:0x4a3323, outfit:0x4ade80, outfit2:0x2f9e5c},
+  {name:'Fotógrafa',   skin:0xf0c49c, hair:0x1c1c1c, outfit:0xf97316, outfit2:0xb6520f},
+  {name:'Terno escuro', skin:0xe8b98a, hair:0x0c0c0f, outfit:0x121218, outfit2:0x0a0a10}
+];
+
+// --- sistema de níveis: cada nível tem sua própria cor/estilo de aura ao redor do personagem ---
+// (os critérios pra subir de nível ainda vão ser definidos — por enquanto o nível fica salvo em users/{uid}/level)
+const LEVELS = [
+  {level:0,  name:'Novato',        colors:null},
+  {level:1,  name:'Aprendiz',      colors:{inner:'rgba(255,255,255,0.95)', mid:'rgba(200,205,215,0.6)',  outer:'rgba(110,115,130,0.35)'}}, // branco/prata
+  {level:2,  name:'Explorador',    colors:{inner:'rgba(190,235,255,0.95)', mid:'rgba(56,189,248,0.65)',  outer:'rgba(10,60,95,0.4)'}},     // azul claro
+  {level:3,  name:'Guardião',      colors:{inner:'rgba(210,255,220,0.95)', mid:'rgba(74,222,128,0.65)',  outer:'rgba(8,60,25,0.4)'}},      // verde
+  {level:4,  name:'Veterano',      colors:{inner:'rgba(255,247,190,0.95)', mid:'rgba(255,200,60,0.7)',   outer:'rgba(90,60,0,0.4)'}},      // amarelo/dourado
+  {level:5,  name:'Elite',         colors:{inner:'rgba(255,220,180,0.95)', mid:'rgba(255,130,40,0.72)',  outer:'rgba(95,30,0,0.42)'}},     // laranja/fogo
+  {level:6,  name:'Campeão',       colors:{inner:'rgba(255,200,200,0.95)', mid:'rgba(240,60,60,0.72)',   outer:'rgba(70,0,0,0.42)'}},      // vermelho
+  {level:7,  name:'Mestre',        colors:{inner:'rgba(255,210,240,0.95)', mid:'rgba(236,72,153,0.72)',  outer:'rgba(80,0,50,0.42)'}},     // rosa/magenta
+  {level:8,  name:'Lenda',         colors:{inner:'rgba(230,210,255,0.95)', mid:'rgba(168,85,247,0.72)',  outer:'rgba(50,0,80,0.42)'}},     // roxo
+  {level:9,  name:'Mítico',        colors:{inner:'rgba(214,190,255,0.95)', mid:'rgba(139,92,246,0.75)',  outer:'rgba(20,5,35,0.5)'}},      // roxo escuro/preto
+  {level:10, name:'Supremo',       colors:'rainbow'}                                                                                        // arco-íris
+];
+function levelInfo(level){ return LEVELS[Math.max(0, Math.min(level|0, LEVELS.length-1))]; }
+
+// ================== SISTEMA DE LEVEL POR TEMPO JOGADO + VIP ==================
+// "dias jogados" aqui = tempo ACUMULADO online no jogo (não dias de calendário desde o cadastro).
+// Cada 60s conectado numa sala soma 60 em users/{uid}/totalPlaySeconds (ver playTimeTick()).
+const DAY_SECONDS = 86400;
+const VIP_TIER_RANK = {'1week':1, '1month':2, '5months':3, '1year':4, '2years':5};
+// quantas mensagens de chat são necessárias pra cada level 8/9/10 — ajuste à vontade
+const CHAT_THRESHOLD_LV8 = 300;
+const CHAT_THRESHOLD_LV9 = 600;
+const CHAT_THRESHOLD_LV10 = 1000;
+
+function hasActiveVIP(vipActiveUntil){ return !!vipActiveUntil && vipActiveUntil > Date.now(); }
+function resolveVrmUrl(vrmId, vipActiveUntil){
+  // só quem tem VIP ativo consegue usar a skin/personagem VRM — sem VIP, cai pro avatar padrão
+  if(!vrmId || !hasActiveVIP(vipActiveUntil)) return null;
+  return (vrmLibrary[vrmId]||{}).url || null;
+}
+function everBoughtTierOrHigher(profile, tier){
+  const need = VIP_TIER_RANK[tier]||99;
+  const hist = Array.isArray(profile.vipHistory) ? profile.vipHistory : [];
+  return hist.some(p => (VIP_TIER_RANK[p.tier]||0) >= need);
+}
+function boughtAnyVipWithinDays(profile, days){
+  const cutoff = Date.now() - days*DAY_SECONDS*1000;
+  const hist = Array.isArray(profile.vipHistory) ? profile.vipHistory : [];
+  return hist.some(p => (p.purchasedAt||0) >= cutoff);
+}
+// busca o status de VIP no Supabase (é lá que fica, confirmado pelo pagamento — não no Firebase)
+async function fetchVipStatus(uid){
+  try{
+    const {data, error} = await supabaseClient.from('vip_status').select('*').eq('uid', uid).maybeSingle();
+    if(error){ console.error('erro ao buscar vip_status:', error); return {tier:null, active_until:null, history:[], freeGrant6moUsed:false}; }
+    return data || {tier:null, active_until:null, history:[], freeGrant6moUsed:false};
+  }catch(e){
+    console.error('erro ao buscar vip_status:', e);
+    return {tier:null, active_until:null, history:[], freeGrant6moUsed:false};
+  }
+}
+// calcula o maior level que o perfil JÁ merece pelos critérios — nunca reduz o level atual sozinho
+function computeEligibleLevel(profile){
+  const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
+  const chatCount = profile.chatMessageCount||0;
+  const activeVipTierRank = hasActiveVIP(profile.vipActiveUntil) ? (VIP_TIER_RANK[profile.vipTier]||0) : 0;
+  let lvl = 0;
+  if(days >= 1)   lvl = 1;
+  if(days >= 5)   lvl = 2;
+  if(days >= 10)  lvl = 3;
+  if(days >= 20 && everBoughtTierOrHigher(profile,'1week'))  lvl = 4;
+  if(days >= 20 && everBoughtTierOrHigher(profile,'1month')) lvl = 5;
+  if(days >= 90 && activeVipTierRank >= VIP_TIER_RANK['1month']) lvl = 6;
+  if(days >= 365) lvl = Math.max(lvl, 7);
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV8  && everBoughtTierOrHigher(profile,'5months')) lvl = 8;
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV9  && everBoughtTierOrHigher(profile,'1year'))   lvl = 9;
+  if(lvl >= 7 && chatCount >= CHAT_THRESHOLD_LV10 && everBoughtTierOrHigher(profile,'2years'))  lvl = 10;
+  return lvl;
+}
+// roda depois de cada tick de tempo jogado (e pode ser chamado a qualquer momento) —
+// sobe o level se necessário, e dá o VIP grátis de 6 meses uma única vez
+async function checkAndApplyLevelUp(){
+  if(!myId) return;
+  try{
+    const snap = await db.ref('users/'+myId).once('value');
+    const profile = snap.val() || {};
+    const vipRow = await fetchVipStatus(myId);
+    profile.vipTier = vipRow.tier || null;
+    profile.vipActiveUntil = vipRow.active_until || null;
+    profile.vipHistory = vipRow.history || [];
+    const updates = {};
+    const days = (profile.totalPlaySeconds||0) / DAY_SECONDS;
+
+    // presente de 6 meses: 1 semana de VIP grátis, só uma vez, se comprou algum VIP nos últimos 3 meses
+    if(days >= 180 && !vipRow.freeGrant6moUsed && boughtAnyVipWithinDays(profile, 90)){
+      try{
+        const resp = await fetch(EDGE_FUNCTIONS_BASE+'/grant-free-vip', {
+          method:'POST', headers: edgeFunctionHeaders(), body: JSON.stringify({uid: myId})
+        });
+        if(resp.ok){
+          const fresh = await fetchVipStatus(myId);
+          profile.vipTier = fresh.tier || null;
+          profile.vipActiveUntil = fresh.active_until || null;
+          profile.vipHistory = fresh.history || [];
+        }
+      }catch(e){ console.error('erro ao conceder vip grátis de 6 meses:', e); }
+    }
+
+    const eligible = computeEligibleLevel(profile);
+    const newLevel = Math.max(profile.level||0, eligible); // nunca desce sozinho (preserva ajuste manual de dev também)
+    if(newLevel !== (profile.level||0)) updates.level = newLevel;
+
+    if(Object.keys(updates).length){
+      await db.ref('users/'+myId).update(updates);
+    }
+    myLevel = newLevel;
+    myVipActiveUntil = profile.vipActiveUntil || null;
+    const lvBadge = document.getElementById('whoLevel');
+    if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
+    const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
+    // reconstrói o personagem (e avisa os outros jogadores) sempre que o LEVEL mudar
+    // OU quando o status de VIP mudar o resultado do VRM (ativou/expirou/foi concedido) —
+    // antes isso só rodava junto com mudança de level, então ativar VIP sem subir de level
+    // nunca atualizava o modelo 3D nem o presence dos outros jogadores.
+    if(currentRoom && myChar && (newLevel !== myChar.userData._levelUsed || vrmUrl !== myChar.userData._vrmUrlUsed)){
+      scene.remove(myChar);
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
+      myChar.userData._levelUsed = myLevel;
+      myChar.userData._vrmUrlUsed = vrmUrl;
+      myChar.position.set(me.x, 0, me.z);
+      scene.add(myChar);
+      if(presenceRef) presenceRef.update({level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
+    }
+  }catch(e){ console.error('erro ao checar level:', e); }
+}
+
+// --- efeito de aura (partículas coloridas subindo ao redor do personagem, cor varia por nível) ---
+const _auraTextureCache = {};
+function getAuraTexture(key, colors){
+  if(_auraTextureCache[key]) return _auraTextureCache[key];
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createRadialGradient(32,32,0,32,32,32);
+  grad.addColorStop(0,    colors.inner);
+  grad.addColorStop(0.32, colors.mid);
+  grad.addColorStop(0.65, colors.outer);
+  grad.addColorStop(1,    'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,64,64);
+  const tex = new THREE.CanvasTexture(c);
+  _auraTextureCache[key] = tex;
+  return tex;
+}
+function createAuraEffect(level){
+  const conf = levelInfo(level);
+  if(!conf.colors) return null;
+  const isRainbow = conf.colors === 'rainbow';
+  const tex = isRainbow
+    ? getAuraTexture('rainbow', {inner:'rgba(255,255,255,0.95)', mid:'rgba(255,255,255,0.65)', outer:'rgba(255,255,255,0.35)'})
+    : getAuraTexture('lvl'+conf.level, conf.colors);
+  const group = new THREE.Group();
+  const particles = [];
+  const count = 18;
+  for(let i=0;i<count;i++){
+    const mat = new THREE.SpriteMaterial({map:tex, color:0xffffff, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false});
+    const sp = new THREE.Sprite(mat);
+    const baseScale = 0.16 + Math.random()*0.22;
+    sp.scale.set(baseScale, baseScale*1.5, 1);
+    sp.userData = {
+      angle: Math.random()*Math.PI*2,
+      radius: 0.22 + Math.random()*0.16,
+      spin: 0.4 + Math.random()*0.6,
+      riseSpeed: 0.32 + Math.random()*0.45,
+      y: Math.random()*1.7,
+      baseScale,
+      flicker: Math.random()*Math.PI*2,
+      hueOffset: Math.random()
+    };
+    group.add(sp);
+    particles.push(sp);
+  }
+  return {group, particles, t:0, rainbow:isRainbow};
+}
+function updateAura(aura, dt){
+  if(!aura) return;
+  aura.t += dt;
+  aura.particles.forEach(sp=>{
+    const u = sp.userData;
+    u.y += u.riseSpeed*dt;
+    if(u.y > 1.75){ u.y = 0; u.angle = Math.random()*Math.PI*2; }
+    u.angle += u.spin*dt;
+    const wobble = Math.sin(aura.t*3 + u.flicker)*0.03;
+    sp.position.set(Math.cos(u.angle)*(u.radius+wobble), u.y, Math.sin(u.angle)*(u.radius+wobble));
+    const fade = 1 - (u.y/1.75);
+    sp.material.opacity = Math.max(0, fade*0.9);
+    const flick = 0.85 + Math.sin(aura.t*8 + u.flicker)*0.15;
+    sp.scale.set(u.baseScale*flick, u.baseScale*1.5*flick, 1);
+    if(aura.rainbow){ sp.material.color.setHSL((aura.t*0.15 + u.hueOffset) % 1, 0.85, 0.62); }
+  });
+}
+
+function buildCharacterPrimitive(def, level){
+  const g = new THREE.Group();
+  // materiais com um leve brilho na borda (rim) pra dar aquele acabamento "anime" sem precisar de shader customizado
+  const matSkin   = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.55, metalness:0.05});
+  const matOutfit = new THREE.MeshStandardMaterial({color:def.outfit, roughness:0.45, metalness:0.1});
+  const matOutfit2= new THREE.MeshStandardMaterial({color:def.outfit2, roughness:0.45, metalness:0.1});
+  const matHair   = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.3, metalness:0.15});
+  const matEye    = new THREE.MeshStandardMaterial({color:0x1a1a22, roughness:0.2, metalness:0.3});
+  const matShoe   = new THREE.MeshStandardMaterial({color:def.hair, roughness:0.6});
+
+  // proporção "chibi": cabeça grande, corpo curto e arredondado — visual mais amigável/anime
+  // (formato de "cápsula" feito juntando cilindro + esferas nas pontas, já que essa versão do
+  // Three.js — r128 — ainda não tem THREE.CapsuleGeometry nativa)
+  function capsuleMesh(radius, cylLength, mat, radialSeg){
+    const grp = new THREE.Group();
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, cylLength, radialSeg||10), mat);
+    grp.add(cyl);
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(radius, radialSeg||10, 8, 0, Math.PI*2, 0, Math.PI/2), mat);
+    capTop.position.y = cylLength/2; grp.add(capTop);
+    const capBot = new THREE.Mesh(new THREE.SphereGeometry(radius, radialSeg||10, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2), mat);
+    capBot.position.y = -cylLength/2; grp.add(capBot);
+    grp.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    return grp;
+  }
+  const torso = capsuleMesh(0.24, 0.34, matOutfit);
+  torso.position.y = 0.92; g.add(torso);
+
+  const hip = new THREE.Mesh(new THREE.SphereGeometry(0.235, 12, 10), matOutfit2);
+  hip.position.y = 0.66; hip.scale.set(1,0.65,1); hip.castShadow = true; g.add(hip);
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.08,0.08,8), matSkin);
+  neck.position.y = 1.15; g.add(neck);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.255, 20, 16), matSkin);
+  head.position.y = 1.42; head.castShadow = true; g.add(head);
+
+  // rostinho simples: dois olhos, dá vida ao personagem sem precisar de textura
+  [-1,1].forEach(side=>{
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), matEye);
+    eye.position.set(side*0.09, 1.415, 0.225);
+    g.add(eye);
+  });
+
+  // cabelo em duas camadas (topo + franja) pra ter um pouco de volume, estilo anime
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.275, 16, 12, 0, Math.PI*2, 0, Math.PI*0.58), matHair);
+  hairTop.position.y = 1.47; hairTop.castShadow = true; g.add(hairTop);
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10, 0, Math.PI*2, Math.PI*0.35, Math.PI*0.45), matHair);
+  hairBack.position.set(0, 1.36, -0.05); hairBack.castShadow = true; g.add(hairBack);
+
+  function limb(mat, len, rad, x, y, capRad){
+    const pivot = new THREE.Group(); pivot.position.set(x,y,0);
+    const mesh = capsuleMesh(rad, Math.max(len-rad*2, 0.02), mat, 8);
+    mesh.position.y = -len/2; pivot.add(mesh);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(capRad||rad*1.15, 10, 8), matSkin);
+    cap.position.y = -len; cap.castShadow = true; pivot.add(cap);
+    g.add(pivot); return pivot;
+  }
+  const armL = limb(matOutfit, 0.34, 0.058, -0.28, 1.12);
+  const armR = limb(matOutfit, 0.34, 0.058,  0.28, 1.12);
+  const legL = limb(matOutfit2, 0.42, 0.085, -0.11, 0.52, 0.07);
+  const legR = limb(matOutfit2, 0.42, 0.085,  0.11, 0.52, 0.07);
+
+  // sapatinhos, pra fechar bem o pé ao invés de terminar na cápsula da perna
+  [-0.11, 0.11].forEach(x=>{
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.13,0.09,0.19), matShoe);
+    shoe.position.set(x, 0.05, 0.03); shoe.castShadow = true; g.add(shoe);
+  });
+
+  g.userData = {kind:'primitive', armL, armR, legL, legR, walkPhase:0};
+  const aura = createAuraEffect(level);
+  if(aura){ g.add(aura.group); g.userData.aura = aura; }
+  return g;
+}
+function animatePrimitiveWalk(group, moving, dt){
+  const u = group.userData;
+  if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
+  const s = Math.sin(u.walkPhase) * 0.55;
+  u.legL.rotation.x = s; u.legR.rotation.x = -s;
+  u.armL.rotation.x = -s*0.8; u.armR.rotation.x = s*0.8;
+}
+
+let realisticGLTF = null, realisticLoadFailed = false;
+function tryLoadRealisticModel(){
+  return new Promise((resolve)=>{
+    try{
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/models/gltf/Soldier.glb',
+        gltf=>{ realisticGLTF = gltf; resolve(true); },
+        undefined,
+        err=>{ console.error('modelo realista falhou, usando personagem simples:', err); realisticLoadFailed = true; resolve(false); }
+      );
+    }catch(e){ console.error(e); realisticLoadFailed = true; resolve(false); }
+  });
+}
+function buildCharacterRealistic(def, level){
+  const wrapper = new THREE.Group();
+  const clone = THREE.SkeletonUtils.clone(realisticGLTF.scene);
+  clone.rotation.y = Math.PI; // the model's own "front" faces the opposite way we need — flip it
+  wrapper.add(clone);
+  clone.traverse(o=>{
+    if(o.isMesh){
+      o.castShadow = true; o.receiveShadow = true;
+      if(o.material){
+        o.material = o.material.clone();
+        if(o.material.color) o.material.color.lerp(new THREE.Color(def.outfit), 0.18);
+      }
+    }
+  });
+  const mixer = new THREE.AnimationMixer(clone);
+  const clips = realisticGLTF.animations || [];
+  const walkClip = THREE.AnimationClip.findByName(clips, 'Walk') || clips[1] || clips[0];
+  const idleClip = THREE.AnimationClip.findByName(clips, 'Idle') || clips[0];
+  const walkAction = walkClip ? mixer.clipAction(walkClip) : null;
+  const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
+  if(idleAction) idleAction.play();
+  wrapper.userData = {kind:'realistic', mixer, walkAction, idleAction, current: idleAction, moving:false};
+  const aura = createAuraEffect(level);
+  if(aura){ wrapper.add(aura.group); wrapper.userData.aura = aura; }
+  return wrapper;
+}
+function animateRealisticWalk(group, moving){
+  const u = group.userData;
+  if(moving === u.moving) return;
+  u.moving = moving;
+  const next = moving ? u.walkAction : u.idleAction;
+  const prev = u.current;
+  if(next && next !== prev){
+    next.reset().fadeIn(0.25).play();
+    if(prev) prev.fadeOut(0.25);
+    u.current = next;
+  }
+}
+function buildCharacter(def, level, vrmUrl){
+  if(vrmUrl) return buildCharacterFromVRMUrl(vrmUrl, level||0);
+  if(realisticGLTF) return buildCharacterRealistic(def, level||0);
+  return buildCharacterPrimitive(def, level||0);
+}
+
+// --- biblioteca compartilhada de personagens VRM ---
+// Só devs podem enviar (upload) novos personagens; qualquer jogador pode escolher entre os já enviados.
+let vrmLibrary = {}; // {id: {name, url}}
+let selectedVrmId2 = null; // seleção atual dentro do modal de troca de personagem
+
+function renderVrmLibraryList(){
+  const el = document.getElementById('vrmLibraryList');
+  el.innerHTML = '';
+  const noneRow = document.createElement('div');
+  noneRow.className = 'room-item'; noneRow.style.cursor = 'pointer';
+  if(!selectedVrmId2) noneRow.style.borderColor = 'var(--nebula-soft)';
+  noneRow.innerHTML = `<div class="rn">Nenhum (usar avatar padrão)</div>`;
+  noneRow.onclick = ()=>{ selectedVrmId2 = null; renderVrmLibraryList(); rebuildAvatarPreviewChar2(); };
+  el.appendChild(noneRow);
+  const ids = Object.keys(vrmLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum personagem VRM enviado ainda.';
+    el.appendChild(empty);
+  }
+  ids.forEach(id=>{
+    const item = vrmLibrary[id];
+    const row = document.createElement('div');
+    row.className = 'room-item'; row.style.cursor = 'pointer';
+    if(selectedVrmId2 === id) row.style.borderColor = 'var(--nebula-soft)';
+    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
+    row.onclick = ()=>{ selectedVrmId2 = id; renderVrmLibraryList(); rebuildAvatarPreviewChar2(); };
+    el.appendChild(row);
+  });
+}
+function vrmRowsToLibrary(rows){
+  const lib = {};
+  (rows||[]).forEach(r=>{ lib[r.id] = {name:r.name, url:r.url, addedBy:r.added_by, addedAt:r.added_at}; });
+  return lib;
+}
+async function loadVrmLibraryOnce(){
+  const {data, error} = await supabaseClient.from('vrm_characters').select('*');
+  if(error){ console.error('erro ao carregar lista de VRM:', error); return; }
+  vrmLibrary = vrmRowsToLibrary(data);
+  renderVrmLibraryList();
+}
+function startVrmLibraryListener(){
+  loadVrmLibraryOnce();
+  supabaseClient
+    .channel('vrm_characters_changes')
+    .on('postgres_changes', {event:'*', schema:'public', table:'vrm_characters'}, ()=>{ loadVrmLibraryOnce(); })
+    .subscribe();
+}
+startVrmLibraryListener();
+// --- biblioteca de mapas (mesmo esquema do VRM, tabela/bucket separados) ---
+let mapLibrary = {}; // {id: {name, url}}
+function mapRowsToLibrary(rows){
+  const lib = {};
+  (rows||[]).forEach(r=>{ lib[r.id] = {name:r.name, url:r.url, addedBy:r.added_by, addedAt:r.added_at}; });
+  return lib;
+}
+async function loadMapLibraryOnce(){
+  const {data, error} = await supabaseClient.from('game_maps').select('*');
+  if(error){ console.error('erro ao carregar lista de mapas:', error); return; }
+  mapLibrary = mapRowsToLibrary(data);
+  renderMapsTab_ifOpen();
+  renderRoomMapPicker();
+}
+function startMapLibraryListener(){
+  loadMapLibraryOnce();
+  supabaseClient
+    .channel('game_maps_changes')
+    .on('postgres_changes', {event:'*', schema:'public', table:'game_maps'}, ()=>{ loadMapLibraryOnce(); })
+    .subscribe();
+}
+startMapLibraryListener();
+function uploadMapToLibrary(file, nameInputEl, msgEl){
+  const name = (nameInputEl.value||'').trim().slice(0,24) || file.name.replace(/\.glb$/i,'').slice(0,24);
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'enviando mapa…';
+  const id = 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  const path = id + '.glb';
+  supabaseClient.storage.from('game-maps').upload(path, file, {contentType:'model/gltf-binary'})
+    .then(({error})=>{
+      if(error) throw error;
+      const {data} = supabaseClient.storage.from('game-maps').getPublicUrl(path);
+      return supabaseClient.from('game_maps').insert({id, name, url:data.publicUrl, added_by:myId, added_at:Date.now()});
+    })
+    .then(({error})=>{
+      if(error) throw error;
+    })
+    .then(()=>{
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'mapa enviado! já aparece pra escolher ao criar sala.';
+      nameInputEl.value = '';
+      loadMapLibraryOnce();
+    })
+    .catch(err=>{
+      console.error('erro ao enviar mapa:', err);
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+    });
+}
+function renderMapsTab_ifOpen(){
+  if(typeof panelCurrentTab !== 'undefined' && panelCurrentTab === 'maps') renderMapsTab();
+}
+function uploadVRMToLibrary(file){
+  const msgEl = document.getElementById('vrmLoadMsg');
+  const nameInput = document.getElementById('vrmNameInput');
+  const name = (nameInput.value||'').trim().slice(0,24) || file.name.replace(/\.vrm$/i,'').slice(0,24);
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'enviando personagem…';
+  const id = 'vrm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  const path = id + '.vrm';
+  supabaseClient.storage.from('vrm-characters').upload(path, file, {contentType:'model/gltf-binary'})
+    .then(({error})=>{
+      if(error) throw error;
+      const {data} = supabaseClient.storage.from('vrm-characters').getPublicUrl(path);
+      return supabaseClient.from('vrm_characters').insert({id, name, url:data.publicUrl, added_by:myId, added_at:Date.now()});
+    })
+    .then(({error})=>{
+      if(error) throw error;
+    })
+    .then(()=>{
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'personagem enviado! já aparece na lista pra todo mundo escolher.';
+      nameInput.value = '';
+      loadVrmLibraryOnce();
+    })
+    .catch(err=>{
+      console.error('erro ao enviar VRM:', err);
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+    });
+}
+document.getElementById('vrmUploadBtn').addEventListener('click', ()=> document.getElementById('vrmFileInput').click());
+document.getElementById('vrmFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(file) uploadVRMToLibrary(file);
+});
+
+// --- loja de VIP ---
+function renderVipPlans(){
+  const el = document.getElementById('vipPlansList');
+  el.innerHTML = '';
+  Object.keys(VIP_PRICES).forEach(tier=>{
+    const row = document.createElement('div');
+    row.className = 'room-item';
+    row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center';
+    row.innerHTML = `<div class="rn">${VIP_NAMES[tier]}</div><button class="btn secondary" style="width:auto; padding:6px 14px;">R$ ${VIP_PRICES[tier].toFixed(2).replace('.',',')}</button>`;
+    row.querySelector('button').onclick = ()=> buyVip(tier);
+    el.appendChild(row);
+  });
+}
+async function refreshVipStatusLine(){
+  const el = document.getElementById('vipStatusLine');
+  el.textContent = 'verificando…';
+  const v = await fetchVipStatus(myId);
+  if(hasActiveVIP(v.active_until)){
+    const dt = new Date(v.active_until);
+    el.textContent = `VIP ativo (${VIP_NAMES[v.tier]||v.tier}) até ${dt.toLocaleDateString('pt-BR')}`;
+    el.style.color = '#5fe1a0';
+  } else {
+    el.textContent = 'você não tem VIP ativo no momento.';
+    el.style.color = 'var(--text-dim)';
+  }
+}
+async function buyVip(tier){
+  const msg = document.getElementById('vipBuyMsg');
+  msg.style.color = 'var(--text-dim)'; msg.textContent = 'gerando pagamento…';
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/create-vip-payment', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({uid: myId, tier})
+    });
+    const data = await resp.json();
+    if(!resp.ok || !data.checkout_url){
+      console.error('erro ao criar pagamento:', data);
+      msg.style.color = 'var(--danger)'; msg.textContent = 'erro ao gerar pagamento (veja o Console/F12).';
+      return;
+    }
+    window.location.href = data.checkout_url;
+  }catch(e){
+    console.error('erro ao comprar vip:', e);
+    msg.style.color = 'var(--danger)'; msg.textContent = 'erro de conexão ao gerar pagamento.';
+  }
+}
+document.getElementById('buyVipBtn').addEventListener('click', ()=>{
+  document.getElementById('vipBuyMsg').textContent = '';
+  renderVipPlans();
+  refreshVipStatusLine();
+  document.getElementById('vipModal').style.display = 'flex';
+});
+document.getElementById('vipModalClose').addEventListener('click', ()=>{
+  document.getElementById('vipModal').style.display = 'none';
+});
+
+// --- construir o personagem a partir de uma URL de VRM (usado tanto pro seu quanto pros outros jogadores) ---
+function buildCharacterFromVRMUrl(url, level){
+  const wrapper = new THREE.Group();
+  wrapper.userData = {kind:'vrm', bones:{}, walkPhase:0};
+  const aura = createAuraEffect(level);
+  if(aura){ aura.group.position.y = 0; wrapper.add(aura.group); wrapper.userData.aura = aura; }
+  const loader = new THREE.GLTFLoader();
+  loader.load(url,
+    gltf=>{
+      try{
+        const parser = gltf.parser;
+        const json = parser.json;
+        const ext = json.extensions || {};
+        const isV1 = !!ext.VRMC_vrm;
+        const isV0 = !isV1 && !!ext.VRM;
+        if(!isV1 && !isV0){ console.error('arquivo VRM sem dados humanoid:', url); return; }
+        const humanBones = isV1
+          ? ext.VRMC_vrm.humanoid.humanBones
+          : ext.VRM.humanoid.humanBones.reduce((acc,b)=>{ acc[b.bone] = {node:b.node}; return acc; }, {});
+        function getNode(name){
+          const entry = humanBones[name];
+          if(!entry) return Promise.resolve(null);
+          return parser.getDependency('node', entry.node);
+        }
+        Promise.all([getNode('leftUpperArm'), getNode('rightUpperArm'), getNode('leftUpperLeg'), getNode('rightUpperLeg'), getNode('leftLowerLeg'), getNode('rightLowerLeg')])
+          .then(([armL, armR, legL, legR, kneeL, kneeR])=>{
+            const model = gltf.scene;
+            model.rotation.y = isV0 ? Math.PI : 0;
+            model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+            wrapper.add(model);
+            const bones = {armL, armR, legL, legR, kneeL, kneeR};
+            if(bones.armL) bones.armL.rotateZ(-1.15);
+            if(bones.armR) bones.armR.rotateZ(1.15);
+            Object.values(bones).forEach(b=>{ if(b) b.userData._restQuat = b.quaternion.clone(); });
+            wrapper.userData.bones = bones;
+          });
+      }catch(err){ console.error('erro ao processar VRM remoto:', err); }
+    },
+    undefined,
+    err=>console.error('erro ao carregar VRM de', url, err)
+  );
+  return wrapper;
+}
+function animateVRMWalk(group, moving, dt){
+  const u = group.userData;
+  if(moving) u.walkPhase += dt*7; else u.walkPhase *= 0.85;
+  const s = Math.sin(u.walkPhase) * 0.45;
+  const kneeBendL = Math.max(0, Math.sin(u.walkPhase)) * 0.9;
+  const kneeBendR = Math.max(0, -Math.sin(u.walkPhase)) * 0.9;
+  const {armL, armR, legL, legR, kneeL, kneeR} = u.bones;
+  if(armL && armL.userData._restQuat) armL.quaternion.copy(armL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s*0.9,0,0)));
+  if(armR && armR.userData._restQuat) armR.quaternion.copy(armR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s*0.9,0,0)));
+  if(legL && legL.userData._restQuat) legL.quaternion.copy(legL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s,0,0)));
+  if(legR && legR.userData._restQuat) legR.quaternion.copy(legR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-s,0,0)));
+  if(kneeL && kneeL.userData._restQuat) kneeL.quaternion.copy(kneeL.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-kneeBendL,0,0)));
+  if(kneeR && kneeR.userData._restQuat) kneeR.quaternion.copy(kneeR.userData._restQuat).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-kneeBendR,0,0)));
+}
+function updateCharacterAnim(group, moving, dt){
+  if(group.userData.kind === 'realistic'){
+    animateRealisticWalk(group, moving);
+    if(group.userData.mixer) group.userData.mixer.update(dt);
+  } else if(group.userData.kind === 'vrm'){
+    animateVRMWalk(group, moving, dt);
+  } else {
+    animatePrimitiveWalk(group, moving, dt);
+  }
+  if(group.userData.aura) updateAura(group.userData.aura, dt);
+}
+
+let avatarIndex = 0;
+let previewScene, previewCamera, previewRenderer, previewChar, previewActive = true;
+function initAvatarPreview(){
+  const canvas = document.getElementById('avatarPreview');
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(35, 150/170, 0.1, 20);
+  previewCamera.position.set(0, 1.3, 2.6);
+  previewCamera.lookAt(0,1.05,0);
+  previewRenderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  previewRenderer.setSize(150,170,false);
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x22264a, 1.0);
+  previewScene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+  dir.position.set(2,3,2);
+  previewScene.add(dir);
+  rebuildAvatarPreviewChar();
+  requestAnimationFrame(previewLoop);
+}
+function rebuildAvatarPreviewChar(){
+  if(previewChar) previewScene.remove(previewChar);
+  previewChar = buildCharacter(AVATARS[avatarIndex], 0);
+  if(previewChar.userData.kind === 'realistic'){ previewChar.scale.set(0.9,0.9,0.9); }
+  previewScene.add(previewChar);
+}
+let previewT = 0, previewLastT = performance.now();
+function previewLoop(t){
+  const dt = Math.min((t-previewLastT)/1000, 0.05); previewLastT = t;
+  if(previewActive){
+    previewT += dt;
+    if(previewChar){
+      previewChar.rotation.y = Math.sin(previewT*0.6)*0.5;
+      updateCharacterAnim(previewChar, true, dt);
+    }
+    previewRenderer.render(previewScene, previewCamera);
+  }
+  requestAnimationFrame(previewLoop);
+}
+
+function renderAvatarDots(){
+  const el = document.getElementById('avatarDots');
+  el.innerHTML='';
+  AVATARS.forEach((a,i)=>{ const d = document.createElement('span'); if(i===avatarIndex) d.className='on'; el.appendChild(d); });
+}
+function updateAvatarLabel(){
+  document.getElementById('avatarName').textContent = AVATARS[avatarIndex].name;
+  renderAvatarDots();
+  rebuildAvatarPreviewChar();
+}
+document.getElementById('prevAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel(); });
+document.getElementById('nextAvatar').addEventListener('click', ()=>{ avatarIndex = (avatarIndex + 1) % AVATARS.length; updateAvatarLabel(); });
+
+// --- modal "trocar personagem" (troca o visual, e pra staff também dá pra testar o nível/aura) ---
+let avatarIndex2 = 0;
+let levelIndex2 = 0;
+let previewScene2, previewCamera2, previewRenderer2, previewChar2, preview2Active = false;
+function initAvatarPreview2(){
+  const canvas = document.getElementById('avatarPreview2');
+  previewScene2 = new THREE.Scene();
+  previewCamera2 = new THREE.PerspectiveCamera(35, 150/170, 0.1, 20);
+  previewCamera2.position.set(0, 1.3, 2.6);
+  previewCamera2.lookAt(0,1.05,0);
+  previewRenderer2 = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  previewRenderer2.setSize(150,170,false);
+  previewRenderer2.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x22264a, 1.0);
+  previewScene2.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+  dir.position.set(2,3,2);
+  previewScene2.add(dir);
+  rebuildAvatarPreviewChar2();
+  requestAnimationFrame(previewLoop2);
+}
+function rebuildAvatarPreviewChar2(){
+  if(previewChar2) previewScene2.remove(previewChar2);
+  const vrmUrl = resolveVrmUrl(selectedVrmId2, myVipActiveUntil);
+  previewChar2 = buildCharacter(AVATARS[avatarIndex2], levelIndex2, vrmUrl);
+  if(previewChar2.userData.kind === 'realistic'){ previewChar2.scale.set(0.9,0.9,0.9); }
+  previewScene2.add(previewChar2);
+}
+let preview2T = 0, preview2LastT = performance.now();
+function previewLoop2(t){
+  const dt = Math.min((t-preview2LastT)/1000, 0.05); preview2LastT = t;
+  if(preview2Active){
+    preview2T += dt;
+    if(previewChar2){
+      previewChar2.rotation.y = Math.sin(preview2T*0.6)*0.5;
+      updateCharacterAnim(previewChar2, true, dt);
+    }
+    previewRenderer2.render(previewScene2, previewCamera2);
+  }
+  requestAnimationFrame(previewLoop2);
+}
+function renderAvatarDots2(){
+  const el = document.getElementById('avatarDots2');
+  el.innerHTML='';
+  AVATARS.forEach((a,i)=>{ const d = document.createElement('span'); if(i===avatarIndex2) d.className='on'; el.appendChild(d); });
+}
+function updateAvatarLabel2(){
+  document.getElementById('avatarName2').textContent = AVATARS[avatarIndex2].name;
+  renderAvatarDots2();
+  rebuildAvatarPreviewChar2();
+}
+function updateLevelLabel2(){
+  document.getElementById('levelName2').textContent = `Nv ${levelIndex2} — ${levelInfo(levelIndex2).name}`;
+  rebuildAvatarPreviewChar2();
+}
+let avatarPreview2Inited = false;
+document.getElementById('prevAvatar2').addEventListener('click', ()=>{ avatarIndex2 = (avatarIndex2 - 1 + AVATARS.length) % AVATARS.length; updateAvatarLabel2(); });
+document.getElementById('nextAvatar2').addEventListener('click', ()=>{ avatarIndex2 = (avatarIndex2 + 1) % AVATARS.length; updateAvatarLabel2(); });
+document.getElementById('prevLevel2').addEventListener('click', ()=>{ levelIndex2 = (levelIndex2 - 1 + LEVELS.length) % LEVELS.length; updateLevelLabel2(); });
+document.getElementById('nextLevel2').addEventListener('click', ()=>{ levelIndex2 = (levelIndex2 + 1) % LEVELS.length; updateLevelLabel2(); });
+const avatarModal = document.getElementById('avatarModal');
+document.getElementById('changeAvatarBtn').addEventListener('click', ()=>{
+  avatarIndex2 = myAvatarIndex;
+  levelIndex2 = myLevel;
+  selectedVrmId2 = myVrmId || null;
+  document.getElementById('avatarSaveMsg').textContent = '';
+  document.getElementById('vrmLoadMsg').textContent = '';
+  document.getElementById('levelTestZone').style.display = canTestAura(myRole) ? 'block' : 'none';
+  document.getElementById('vrmDevUpload').style.display = canManageVRM(myRole) ? 'block' : 'none';
+  avatarModal.style.display = 'flex';
+  preview2Active = true;
+  renderVrmLibraryList();
+  if(!avatarPreview2Inited){ avatarPreview2Inited = true; initAvatarPreview2(); }
+  else { updateAvatarLabel2(); updateLevelLabel2(); }
+});
+document.getElementById('avatarModalClose').addEventListener('click', ()=>{ avatarModal.style.display='none'; preview2Active = false; });
+document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
+  const msg = document.getElementById('avatarSaveMsg');
+  msg.style.color = 'var(--text-dim)'; msg.textContent = 'salvando…';
+  try{
+    const updates = {avatarIndex: avatarIndex2, vrmId: selectedVrmId2 || null};
+    if(canTestAura(myRole)) updates.level = levelIndex2;
+    await db.ref('users/'+myId).update(updates);
+    myAvatarIndex = avatarIndex2;
+    myVrmId = selectedVrmId2 || null;
+    if(canTestAura(myRole)) myLevel = levelIndex2;
+    document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
+    const lvBadge = document.getElementById('whoLevel');
+    if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
+    if(currentRoom && myChar){
+      scene.remove(myChar);
+      const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
+      myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, vrmUrl);
+      myChar.userData._levelUsed = myLevel;
+      myChar.userData._vrmUrlUsed = vrmUrl;
+      myChar.position.set(me.x, 0, me.z);
+      scene.add(myChar);
+      if(presenceRef) presenceRef.update({vrmId: myVrmId, vipActiveUntil: myVipActiveUntil||null}).catch(()=>{});
+    }
+    msg.style.color = 'var(--ok)'; msg.textContent = 'personagem salvo!';
+    setTimeout(()=>{ avatarModal.style.display='none'; preview2Active = false; }, 700);
+  }catch(e){
+    console.error(e);
+    msg.style.color = 'var(--danger)'; msg.textContent = 'não consegui salvar, tenta de novo.';
+  }
+});
+
+const tabRegister = document.getElementById('tabRegister');
+const tabLogin = document.getElementById('tabLogin');
+const registerForm = document.getElementById('registerForm');
+const loginForm = document.getElementById('loginForm');
+const authError = document.getElementById('authError');
+tabRegister.addEventListener('click', ()=>{
+  tabRegister.classList.add('active'); tabLogin.classList.remove('active');
+  registerForm.style.display='block'; loginForm.style.display='none'; authError.textContent='';
+});
+tabLogin.addEventListener('click', ()=>{
+  tabLogin.classList.add('active'); tabRegister.classList.remove('active');
+  loginForm.style.display='block'; registerForm.style.display='none'; authError.textContent='';
+});
+
+function friendlyAuthError(code){
+  const map = {
+    'auth/email-already-in-use':'Esse e-mail já tem conta — tenta entrar em vez de cadastrar.',
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/weak-password':'Senha muito curta (mínimo 6 caracteres).',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/user-not-found':'Não achei conta com esse e-mail.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.',
+    'auth/too-many-requests':'Muitas tentativas — espera um pouco e tenta de novo.'
+  };
+  return map[code] || 'Algo deu errado. Tenta de novo.';
+}
+
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+let completingGoogleProfile = false;
+let pendingGoogleUser = null;
+
+document.getElementById('googleBtn').addEventListener('click', async ()=>{
+  authError.textContent='';
+  try{
+    await auth.signInWithPopup(googleProvider);
+    // onAuthStateChanged handles what happens next (lobby, or finish-profile step)
+  }catch(e){
+    console.error(e);
+    authError.textContent = friendlyAuthError(e.code);
+  }
+});
+
+document.getElementById('registerBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('regName').value.trim().slice(0,16);
+  authError.textContent='';
+  if(!name){ authError.textContent='Digite um nome.'; return; }
+
+  if(completingGoogleProfile){
+    try{
+      const uid = pendingGoogleUser.uid;
+      let wasFirst = false;
+      await db.ref('meta/ownerAssigned').transaction(current=>{
+        if(current === null || current === undefined){ wasFirst = true; return true; }
+        wasFirst = false; return current;
+      });
+      const role = wasFirst ? 'dev_senior' : 'player';
+      const profile = {name, email: pendingGoogleUser.email||'', avatarIndex, role, level:0, isNew: !wasFirst, createdAt: Date.now()};
+      await db.ref('users/'+uid).set(profile);
+      myId = uid; myName = name; myAvatarIndex = avatarIndex; myRole = role; myLevel = 0; myIsNew = profile.isNew;
+      completingGoogleProfile = false; pendingGoogleUser = null;
+      previewActive = false;
+      document.getElementById('auth-screen').style.display='none';
+      document.getElementById('lobby-screen').style.display='flex';
+      enterLobbyUI();
+    }catch(e){
+      console.error(e);
+      authError.textContent = 'Não consegui salvar seu perfil. Tenta de novo.';
+    }
+    return;
+  }
+
+  const email = document.getElementById('regEmail').value.trim();
+  const pass = document.getElementById('regPass').value;
+  if(!email || !pass){ authError.textContent='Preenche e-mail e senha.'; return; }
+  try{
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    const uid = cred.user.uid;
+    let wasFirst = false;
+    await db.ref('meta/ownerAssigned').transaction(current=>{
+      if(current === null || current === undefined){ wasFirst = true; return true; }
+      wasFirst = false; return current;
+    });
+    const role = wasFirst ? 'dev_senior' : 'player';
+    const profile = {name, email, avatarIndex, role, level:0, isNew: !wasFirst, createdAt: Date.now()};
+    await db.ref('users/'+uid).set(profile);
+  }catch(e){
+    console.error(e);
+    authError.textContent = friendlyAuthError(e.code);
+  }
+});
+
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('logEmail').value.trim();
+  const pass = document.getElementById('logPass').value;
+  authError.textContent='';
+  if(!email || !pass){ authError.textContent='Preenche e-mail e senha.'; return; }
+  try{
+    await auth.signInWithEmailAndPassword(email, pass);
+  }catch(e){
+    console.error(e);
+    authError.textContent = friendlyAuthError(e.code);
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
+
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null, myVipActiveUntil = null;
+
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    let snap;
+    try{ snap = await db.ref('users/'+user.uid).once('value'); }catch(e){ console.error(e); }
+    let profile = snap && snap.val();
+    if(!profile){
+      // no profile yet (e.g. first-time Google sign-in) — ask for name + avatar before entering
+      completingGoogleProfile = true;
+      pendingGoogleUser = user;
+      document.getElementById('regName').value = user.displayName ? user.displayName.split(' ')[0].slice(0,16) : '';
+      document.getElementById('emailPassFields').style.display = 'none';
+      document.querySelector('#auth-screen .tabs').style.display = 'none';
+      document.getElementById('googleBtn').style.display = 'none';
+      document.getElementById('registerForm').style.display = 'block';
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('registerBtn').textContent = 'Concluir cadastro';
+      document.getElementById('auth-screen').style.display = 'flex';
+      document.getElementById('lobby-screen').style.display = 'none';
+      previewActive = true;
+      return;
+    }
+    myId = user.uid;
+    myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
+    fetchVipStatus(myId).then(v=>{ myVipActiveUntil = v.active_until||null; });
+    previewActive = false;
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('lobby-screen').style.display='flex';
+    enterLobbyUI();
+  } else {
+    myId=null; myName=''; myRole='player';
+    document.getElementById('lobby-screen').style.display='none';
+    document.getElementById('room-screen').style.display='none';
+    document.getElementById('auth-screen').style.display='flex';
+    previewActive = true;
+  }
+});
+
+function enterLobbyUI(){
+  document.getElementById('who-name').textContent = myName;
+  document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
+  const roleInfo = ROLES[myRole]||ROLES.player;
+  const badge = document.getElementById('whoRole');
+  badge.textContent = roleInfo.label;
+  badge.style.background = roleInfo.color+'33';
+  badge.style.color = roleInfo.color;
+  const lvBadge = document.getElementById('whoLevel');
+  if(lvBadge){
+    const lv = levelInfo(myLevel);
+    lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`;
+  }
+  document.getElementById('panelBtnLobby').style.display = isStaff(myRole) ? 'inline-block' : 'none';
+  document.getElementById('panelBtn').style.display = isStaff(myRole) ? 'inline-block' : 'none';
+  document.getElementById('switchMapBtn').style.display = canCreateRoom(myRole) ? 'inline-block' : 'none';
+
+  const zone = document.getElementById('createRoomZone');
+  if(canCreateRoom(myRole)){
+    zone.innerHTML = `<div class="create-row"><input type="text" id="roomNameInput" maxlength="24" placeholder="Nome da sua sala (ex: Cantinho do Zé)"><button class="btn" id="createRoomBtn">Criar e entrar</button></div>
+      <div style="margin-top:14px;">
+        <label style="display:block; font-size:11px; color:var(--text-dim); margin:0 0 8px; letter-spacing:.5px; text-transform:uppercase;">Mapa da sala</label>
+        <div id="roomMapList" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow:auto;">
+          <div class="empty" style="padding:8px 0;">carregando…</div>
+        </div>
+      </div>`;
+    document.getElementById('createRoomBtn').addEventListener('click', createRoomHandler);
+    selectedRoomMapId = null;
+    renderRoomMapPicker();
+  } else {
+    zone.innerHTML = `<div class="locked-note">Criação de salas está limitada à equipe de desenvolvimento (Desenvolvedor/GM) enquanto o jogo ainda está em testes.</div>`;
+  }
+  refreshRoomList();
+}
+
+const ROOM_CAPACITY = 50;
+const roomListEl = document.getElementById('roomList');
+const DEFAULT_ROOM = {id:'praca-central', name:'Praça Central', system:true};
+
+async function countRoomPlayers(id){
+  try{
+    const snap = await db.ref('rooms/'+id+'/players').once('value');
+    const val = snap.val();
+    return val ? Object.keys(val).length : 0;
+  }catch(e){ return 0; }
+}
+async function getRoomList(){
+  try{
+    const snap = await db.ref('rooms').once('value');
+    const val = snap.val() || {};
+    return Object.keys(val)
+      .filter(id => id !== DEFAULT_ROOM.id && val[id].meta)
+      .map(id => ({id, name: val[id].meta.name, owner: val[id].meta.owner, createdAt: val[id].meta.createdAt}))
+      .sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+  }catch(e){ console.error('getRoomList error', e); return []; }
+}
+async function refreshRoomList(){
+  const rooms = await getRoomList();
+  const all = [DEFAULT_ROOM, ...rooms];
+  const counts = await Promise.all(all.map(r=>countRoomPlayers(r.id)));
+  renderRoomList(all.map((r,i)=>({...r, count:counts[i]})));
+}
+function renderRoomList(rooms){
+  roomListEl.innerHTML='';
+  if(rooms.length===0){ roomListEl.innerHTML = '<div class="empty">nenhuma sala ainda — crie a primeira!</div>'; return; }
+  rooms.forEach(room=>{
+    const full = room.count >= ROOM_CAPACITY;
+    const item = document.createElement('div');
+    item.className='room-item'+(full?' full':'');
+    item.innerHTML = `<div><div class="rn">${escapeHtml(room.name)}</div>
+      <div class="rm">${room.system ? 'sala padrão, sempre aberta' : 'criada por ' + escapeHtml(room.owner||'alguém')}</div></div>
+      <div style="text-align:right;"><div class="cap">${room.count}/${ROOM_CAPACITY}</div><div class="go">${full?'sala cheia':'entrar →'}</div></div>`;
+    if(!full) item.onclick = ()=> enterRoom(room.id, room.name);
+    roomListEl.appendChild(item);
+  });
+}
+let selectedRoomMapId = null; // mapa escolhido na hora de criar sala (lista clicável, igual à de VRM)
+function renderRoomMapPicker(){
+  const el = document.getElementById('roomMapList');
+  if(!el) return;
+  el.innerHTML = '';
+  const defaultRow = document.createElement('div');
+  defaultRow.className = 'room-item'; defaultRow.style.cursor = 'pointer';
+  if(!selectedRoomMapId) defaultRow.style.borderColor = 'var(--nebula-soft)';
+  defaultRow.innerHTML = `<div class="rn">Mapa padrão (Nébula)</div>`;
+  defaultRow.onclick = ()=>{ selectedRoomMapId = null; renderRoomMapPicker(); };
+  el.appendChild(defaultRow);
+  const ids = Object.keys(mapLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum mapa customizado enviado ainda.';
+    el.appendChild(empty);
+  }
+  ids.forEach(id=>{
+    const item = mapLibrary[id];
+    const row = document.createElement('div');
+    row.className = 'room-item'; row.style.cursor = 'pointer';
+    if(selectedRoomMapId === id) row.style.borderColor = 'var(--nebula-soft)';
+    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
+    row.onclick = ()=>{ selectedRoomMapId = id; renderRoomMapPicker(); };
+    el.appendChild(row);
+  });
+}
+async function createRoomHandler(){
+  const input = document.getElementById('roomNameInput');
+  const name = input.value.trim().slice(0,24);
+  if(!name) return;
+  const mapId = selectedRoomMapId || null;
+  const id = 'r_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,20) + '_' + Math.random().toString(36).slice(2,6);
+  try{ await db.ref('rooms/'+id+'/meta').set({name, owner:myName, createdAt: Date.now(), mapId: mapId || null}); }catch(e){ console.error(e); }
+  input.value='';
+  selectedRoomMapId = null;
+  enterRoom(id, name);
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// --- modal de trocar o mapa de uma sala já criada ---
+let selectedSwitchMapId = null;
+const mapSwitchModal = document.getElementById('mapSwitchModal');
+function renderSwitchMapPicker(){
+  const el = document.getElementById('switchMapList');
+  if(!el) return;
+  el.innerHTML = '';
+  const defaultRow = document.createElement('div');
+  defaultRow.className = 'room-item'; defaultRow.style.cursor = 'pointer';
+  if(!selectedSwitchMapId) defaultRow.style.borderColor = 'var(--nebula-soft)';
+  defaultRow.innerHTML = `<div class="rn">Mapa padrão (Nébula)</div>`;
+  defaultRow.onclick = ()=>{ selectedSwitchMapId = null; renderSwitchMapPicker(); };
+  el.appendChild(defaultRow);
+  const ids = Object.keys(mapLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum mapa customizado enviado ainda.';
+    el.appendChild(empty);
+  }
+  ids.forEach(id=>{
+    const item = mapLibrary[id];
+    const row = document.createElement('div');
+    row.className = 'room-item'; row.style.cursor = 'pointer';
+    if(selectedSwitchMapId === id) row.style.borderColor = 'var(--nebula-soft)';
+    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
+    row.onclick = ()=>{ selectedSwitchMapId = id; renderSwitchMapPicker(); };
+    el.appendChild(row);
+  });
+}
+function openMapSwitchModal(){
+  selectedSwitchMapId = currentWorldMapId || null;
+  document.getElementById('switchMapMsg').textContent = '';
+  mapSwitchModal.style.display = 'flex';
+  renderSwitchMapPicker();
+}
+document.getElementById('switchMapBtn').addEventListener('click', openMapSwitchModal);
+document.getElementById('mapSwitchModalClose').addEventListener('click', ()=>{ mapSwitchModal.style.display='none'; });
+document.getElementById('saveSwitchMapBtn').addEventListener('click', async ()=>{
+  if(!currentRoom) return;
+  const msgEl = document.getElementById('switchMapMsg');
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'trocando…';
+  try{
+    await db.ref('rooms/'+currentRoom+'/meta/mapId').set(selectedSwitchMapId || null);
+    mapSwitchModal.style.display = 'none';
+  }catch(e){
+    console.error('erro ao trocar mapa da sala:', e);
+    msgEl.style.color = 'var(--danger)'; msgEl.textContent = 'erro ao trocar (veja o Console/F12).';
+  }
+});
+
+let currentRoom = null;
+let currentWorldMapId = undefined; // undefined = mundo ainda não construído
+let usingCustomMap = false;
+let scene, camera, renderer, glCanvas;
+let myChar, myMoving=false;
+const me = {x:0, z:6, rotY:0, targetRotY:0};
+const WORLD_RADIUS = 34;
+const remote = {};
+const keys = {};
+const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
+
+const POND = {x:20, z:-18, r:7};
+const VILLAGE = {x:-24, z:16};
+const FOUNTAIN = {x:0, z:-10};
+function nearLandmark(x,z,extra){
+  extra = extra||0;
+  if(Math.hypot(x-POND.x,z-POND.z) < POND.r+2.5+extra) return true;
+  if(Math.hypot(x-VILLAGE.x,z-VILLAGE.z) < 8+extra) return true;
+  if(Math.hypot(x-FOUNTAIN.x,z-FOUNTAIN.z) < 5+extra) return true;
+  return false;
+}
+
+function buildSkyDome(){
+  const skyGeo = new THREE.SphereGeometry(170, 24, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms:{
+      topColor:{value:new THREE.Color(0x4a90d9)},
+      bottomColor:{value:new THREE.Color(0xffd9a0)},
+      offset:{value:12}, exponent:{value:0.65}
+    },
+    vertexShader:`varying vec3 vWorldPosition; void main(){ vec4 wp = modelMatrix*vec4(position,1.0); vWorldPosition=wp.xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`uniform vec3 topColor; uniform vec3 bottomColor; uniform float offset; uniform float exponent; varying vec3 vWorldPosition;
+      void main(){ float h = normalize(vWorldPosition+vec3(0.0,offset,0.0)).y; gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h,0.0),exponent),0.0)),1.0); }`,
+    side: THREE.BackSide, depthWrite:false
+  });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(sky);
+}
+
+const clouds = [];
+function makeCloud(x,y,z,scale){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:1, transparent:true, opacity:0.92});
+  const puffs = 4+Math.floor(Math.random()*3);
+  for(let i=0;i<puffs;i++){
+    const s = (0.6+Math.random()*0.7)*scale;
+    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(s,0), mat);
+    puff.position.set((Math.random()-0.5)*2.4*scale, (Math.random()-0.5)*0.35*scale, (Math.random()-0.5)*1.3*scale);
+    puff.scale.y = 0.55;
+    g.add(puff);
+  }
+  g.position.set(x,y,z);
+  g.userData.driftSpeed = 0.15 + Math.random()*0.25;
+  scene.add(g);
+  clouds.push(g);
+}
+
+function buildPond(){
+  const waterMat = new THREE.MeshStandardMaterial({color:0x4fa8c9, roughness:0.15, metalness:0.15, transparent:true, opacity:0.92});
+  const water = new THREE.Mesh(new THREE.CircleGeometry(POND.r, 28), waterMat);
+  water.rotation.x = -Math.PI/2;
+  water.position.set(POND.x, -0.35, POND.z);
+  scene.add(water);
+  // a little wooden dock jutting into the water
+  const plankMat = new THREE.MeshStandardMaterial({color:0x8a6a45, roughness:0.9});
+  for(let i=0;i<7;i++){
+    const t = i/6;
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.3,0.08,0.5), plankMat);
+    plank.position.set(POND.x - (POND.r+2-t*6), -0.28+t*0.02, POND.z+3);
+    plank.rotation.y = Math.PI/2;
+    plank.castShadow = true;
+    scene.add(plank);
+  }
+  const railMat = new THREE.MeshStandardMaterial({color:0x6b4a2f});
+  for(const side of [-1,1]){
+    for(let i=0;i<3;i++){
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.5,6), railMat);
+      post.position.set(POND.x - (POND.r+2-i*2.6), -0.1, POND.z+3+side*0.28);
+      scene.add(post);
+    }
+  }
+}
+
+function buildPath(points, widthBase){
+  const dirtMat = new THREE.MeshStandardMaterial({color:0x8a6a45, roughness:1});
+  for(let i=0;i<points.length-1;i++){
+    const a=points[i], b=points[i+1];
+    const steps = 12;
+    for(let s=0;s<=steps;s++){
+      const t=s/steps;
+      const x = a.x+(b.x-a.x)*t, z = a.z+(b.z-a.z)*t;
+      const r = widthBase*(0.75+Math.random()*0.4);
+      const circ = new THREE.Mesh(new THREE.CircleGeometry(r,10), dirtMat);
+      circ.rotation.x = -Math.PI/2;
+      circ.position.set(x, groundHeightAt(x,z)+0.025, z);
+      scene.add(circ);
+    }
+  }
+}
+
+function makeHouse(x,z,rotY,roofColor){
+  const g = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({color:0xe8d9b0, roughness:0.9});
+  const roofMat = new THREE.MeshStandardMaterial({color:roofColor||0xb44b3e, roughness:0.8});
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3,2.2,3), wallMat);
+  body.position.y=1.1; body.castShadow=true; body.receiveShadow=true; g.add(body);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(2.5,1.6,4), roofMat);
+  roof.rotation.y = Math.PI/4; roof.position.y = 2.2+0.8; roof.castShadow=true; g.add(roof);
+  const doorMat = new THREE.MeshStandardMaterial({color:0x5b3a24});
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.7,1.3,0.1), doorMat);
+  door.position.set(0,0.65,1.51); g.add(door);
+  const winMat = new THREE.MeshStandardMaterial({color:0x9fd6e8, emissive:0x224455, emissiveIntensity:0.3});
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.08), winMat);
+  win.position.set(1.0,1.3,1.51); g.add(win);
+  g.position.set(x, groundHeightAt(x,z), z);
+  g.rotation.y = rotY||0;
+  scene.add(g);
+}
+function buildVillage(){
+  const roofColors = [0xb44b3e, 0x4a7c9e, 0x7a9e4a];
+  const layout = [{dx:-3,dz:-2},{dx:2,dz:-3},{dx:-2,dz:3},{dx:3,dz:2.5}];
+  layout.forEach((p,i)=>{
+    makeHouse(VILLAGE.x+p.dx*2.4, VILLAGE.z+p.dz*2.4, Math.random()*Math.PI*2, roofColors[i%3]);
+  });
+}
+
+function buildBench(x,z,rotY){
+  const g = new THREE.Group();
+  const woodMat = new THREE.MeshStandardMaterial({color:0x7a5230, roughness:0.85});
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.12,0.5), woodMat);
+  seat.position.y=0.5; seat.castShadow=true; g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.5,0.1), woodMat);
+  back.position.set(0,0.78,-0.2); g.add(back);
+  [[-0.65,-0.2],[0.65,-0.2],[-0.65,0.15],[0.65,0.15]].forEach(([lx,lz])=>{
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.5,0.08), woodMat);
+    leg.position.set(lx,0.25,lz); g.add(leg);
+  });
+  g.position.set(x, groundHeightAt(x,z), z);
+  g.rotation.y = rotY||0;
+  scene.add(g);
+}
+function buildFountain(){
+  const g = new THREE.Group();
+  const baseMat = new THREE.MeshStandardMaterial({color:0xcfcfcf, roughness:0.6});
+  const waterMat = new THREE.MeshStandardMaterial({color:0x5ab3d8, roughness:0.2, metalness:0.1});
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(2.2,2.4,0.5,20), baseMat);
+  base.position.y=0.25; base.castShadow=true; base.receiveShadow=true; g.add(base);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(1.9,1.9,0.1,20), waterMat);
+  water.position.y=0.52; g.add(water);
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.3,1.2,10), baseMat);
+  pillar.position.y=1.1; pillar.castShadow=true; g.add(pillar);
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.35,12,10), waterMat);
+  top.position.y=1.8; g.add(top);
+  g.position.set(FOUNTAIN.x, groundHeightAt(FOUNTAIN.x,FOUNTAIN.z), FOUNTAIN.z);
+  scene.add(g);
+  buildBench(FOUNTAIN.x-3.2, FOUNTAIN.z-1, Math.PI/2);
+  buildBench(FOUNTAIN.x+3.2, FOUNTAIN.z-1, -Math.PI/2);
+  buildBench(FOUNTAIN.x, FOUNTAIN.z-3.6, 0);
+}
+
+function buildWorld(mapUrl){
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xffe0b3, 22, 72);
+  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+  glCanvas = document.getElementById('gl');
+  renderer = new THREE.WebGLRenderer({canvas:glCanvas, antialias:true});
+  renderer.shadowMap.enabled = true;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  if(THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+  if(THREE.ACESFilmicToneMapping){ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1; }
+
+  buildSkyDome();
+
+  const hemi = new THREE.HemisphereLight(0xffe9c9, 0x3a6b2f, 0.9);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffdca8, 1.2);
+  sun.position.set(22, 22, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left=-40; sun.shadow.camera.right=40; sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40;
+  scene.add(sun);
+
+  for(let i=0;i<11;i++){
+    const a = Math.random()*Math.PI*2, r = 20+Math.random()*22;
+    makeCloud(Math.cos(a)*r, 24+Math.random()*10, Math.sin(a)*r, 1.4+Math.random()*1.6);
+  }
+
+  usingCustomMap = !!mapUrl;
+  if(mapUrl){
+    // mapa customizado enviado por um dev: carrega o .glb e pula a geração procedural padrão.
+    // OBS: mapas customizados usam chão "chato" (altura 0) — sem o relevo procedural do mapa padrão.
+    const loader = new THREE.GLTFLoader();
+    loader.load(mapUrl,
+      gltf=>{
+        gltf.scene.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+        scene.add(gltf.scene);
+      },
+      undefined,
+      err=>console.error('erro ao carregar mapa customizado:', err)
+    );
+    return;
+  }
+
+  const groundGeo = new THREE.PlaneGeometry(140,140,80,80);
+  groundGeo.rotateX(-Math.PI/2);
+  const pos = groundGeo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i), z=pos.getZ(i);
+    pos.setY(i, groundHeightAt(x,z));
+  }
+  groundGeo.computeVertexNormals();
+
+  let groundMat;
+  try{
+    const texLoader = new THREE.TextureLoader();
+    const grassTex = texLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/terrain/grasslight-big.jpg');
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+    grassTex.repeat.set(26,26);
+    groundMat = new THREE.MeshStandardMaterial({map:grassTex, roughness:1});
+  }catch(e){
+    groundMat = new THREE.MeshStandardMaterial({color:0x4fae4a, roughness:1});
+  }
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  buildPond();
+  buildVillage();
+  buildFountain();
+  buildPath([{x:0,z:-2},{x:0,z:-6},{x:FOUNTAIN.x,z:FOUNTAIN.z}], 1.1);
+  buildPath([{x:FOUNTAIN.x,z:FOUNTAIN.z},{x:10,z:-14},{x:POND.x-6,z:POND.z+2},{x:POND.x-2,z:POND.z+3}], 0.9);
+  buildPath([{x:0,z:-2},{x:-10,z:6},{x:VILLAGE.x+6,z:VILLAGE.z-4},{x:VILLAGE.x,z:VILLAGE.z}], 0.9);
+
+  const flowerColors = [0xffc857, 0xffffff, 0xff8fb3];
+  const flowerGeo = new THREE.ConeGeometry(0.06,0.16,5);
+  for(let i=0;i<170;i++){
+    const a = Math.random()*Math.PI*2, r = 4+Math.random()*32;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if(nearLandmark(x,z)) continue;
+    const mat = new THREE.MeshStandardMaterial({color: flowerColors[i%3]});
+    const fl = new THREE.Mesh(flowerGeo, mat);
+    fl.position.set(x, groundHeightAt(x,z)+0.08, z);
+    scene.add(fl);
+  }
+  // tufts of tall grass for texture close to the player
+  const grassBladeMat = new THREE.MeshStandardMaterial({color:0x3d8f3f, roughness:1});
+  for(let i=0;i<220;i++){
+    const a = Math.random()*Math.PI*2, r = 2+Math.random()*30;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if(nearLandmark(x,z)) continue;
+    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.05,0.3+Math.random()*0.2,4), grassBladeMat);
+    tuft.position.set(x, groundHeightAt(x,z)+0.12, z);
+    tuft.rotation.y = Math.random()*Math.PI;
+    scene.add(tuft);
+  }
+
+  function makeTree(x,z,scale,variant){
+    const g = new THREE.Group();
+    const trunkColors = [0x6b4a2f, 0x5a3d28, 0x7a5a3a];
+    const leafColors = [0x2f7d3a, 0x3a8f45, 0x276b32, 0x4a9a3f];
+    const trunkH = 1.6*scale;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14*scale,0.2*scale,trunkH,7), new THREE.MeshStandardMaterial({color:trunkColors[variant%3], roughness:1}));
+    trunk.position.y = trunkH/2; trunk.castShadow = true; g.add(trunk);
+    const leafMat = new THREE.MeshStandardMaterial({color:leafColors[variant%4], roughness:0.9});
+    if(variant%3===0){
+      // rounded canopy tree
+      for(let i=0;i<3;i++){
+        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry((0.85-i*0.1)*scale,0), leafMat);
+        puff.position.set((Math.random()-0.5)*0.5*scale, trunkH+0.5*scale+i*0.35*scale, (Math.random()-0.5)*0.5*scale);
+        puff.castShadow = true; g.add(puff);
+      }
+    } else {
+      // conical pine tree
+      for(let i=0;i<3;i++){
+        const cone = new THREE.Mesh(new THREE.ConeGeometry((1.1-i*0.18)*scale, 1.3*scale, 8), leafMat);
+        cone.position.y = trunkH + i*0.85*scale; cone.castShadow = true; g.add(cone);
+      }
+    }
+    g.position.set(x, groundHeightAt(x,z), z);
+    scene.add(g);
+  }
+  for(let i=0;i<50;i++){
+    const a = (i/50)*Math.PI*2 + Math.random()*0.15, r = 30 + Math.random()*10;
+    const x=Math.cos(a)*r, z=Math.sin(a)*r;
+    makeTree(x, z, 0.8+Math.random()*0.7, i);
+  }
+  for(let i=0;i<14;i++){
+    const a = Math.random()*Math.PI*2, r = 16+Math.random()*10;
+    const x=Math.cos(a)*r, z=Math.sin(a)*r;
+    if(nearLandmark(x,z)) continue;
+    makeTree(x, z, 0.65+Math.random()*0.5, i+3);
+  }
+  const bushColors = [0x2f7d3a, 0x3a8f45, 0x276b32];
+  for(let i=0;i<28;i++){
+    const a = Math.random()*Math.PI*2, r = 6+Math.random()*26;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if(nearLandmark(x,z)) continue;
+    const bushMat = new THREE.MeshStandardMaterial({color:bushColors[i%3], roughness:0.95});
+    const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5+Math.random()*0.4, 0), bushMat);
+    bush.position.set(x, groundHeightAt(x,z)+0.35, z);
+    bush.castShadow = true;
+    scene.add(bush);
+  }
+}
+function groundHeightAt(x,z){
+  if(usingCustomMap) return 0;
+  const base = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
+  const d = Math.hypot(x-POND.x, z-POND.z);
+  const basin = -0.85;
+  if(d <= POND.r) return basin;
+  if(d <= POND.r+3){ const t=(d-POND.r)/3; return basin*(1-t)+base*t; }
+  return base;
+}
+
+
+function resizeRenderer(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', ()=>{ if(renderer) resizeRenderer(); });
+
+function handleKeyDown(e){
+  const chatInputEl = document.getElementById('chatInput');
+  const chatOpen = document.getElementById('chatInputWrap').style.display === 'block';
+  if(!chatOpen && e.key === 'Enter' && currentRoom){ openChatInput(); e.preventDefault(); return; }
+  if(document.activeElement === chatInputEl) return;
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if(MOVE_KEYS.includes(k)) e.preventDefault();
+}
+function handleKeyUp(e){ keys[e.key.toLowerCase()] = false; }
+window.addEventListener('keydown', handleKeyDown);
+window.addEventListener('keyup', handleKeyUp);
+document.addEventListener('keydown', handleKeyDown);
+document.addEventListener('keyup', handleKeyUp);
+
+document.querySelectorAll('.dpad-btn').forEach(btn=>{
+  const k = btn.getAttribute('data-key');
+  const press = (e)=>{ e.preventDefault(); keys[k]=true; btn.classList.add('pressed'); };
+  const release = ()=>{ keys[k]=false; btn.classList.remove('pressed'); };
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('touchstart', press, {passive:false});
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+  btn.addEventListener('touchend', release);
+  btn.addEventListener('touchcancel', release);
+});
+
+function updateMe(dt){
+  let dx=0, dz=0;
+  if(keys['w']||keys['arrowup']) dz -= 1;
+  if(keys['s']||keys['arrowdown']) dz += 1;
+  if(keys['a']||keys['arrowleft']) dx -= 1;
+  if(keys['d']||keys['arrowright']) dx += 1;
+  myMoving = (dx!==0 || dz!==0);
+  if(myMoving){
+    const len = Math.hypot(dx,dz); dx/=len; dz/=len;
+    me.targetRotY = Math.atan2(dx, dz);
+    const speed = 4.2*dt;
+    const nx = me.x + dx*speed, nz = me.z + dz*speed;
+    if(Math.hypot(nx,nz) < WORLD_RADIUS){ me.x = nx; me.z = nz; }
+  }
+  let diff = me.targetRotY - me.rotY;
+  while(diff > Math.PI) diff -= Math.PI*2;
+  while(diff < -Math.PI) diff += Math.PI*2;
+  me.rotY += diff * Math.min(1, dt*10);
+
+  myChar.position.set(me.x, groundHeightAt(me.x,me.z), me.z);
+  myChar.rotation.y = me.rotY;
+  updateCharacterAnim(myChar, myMoving, dt);
+
+  const camDist = 4.4, camHeight = 2.2;
+  const desired = new THREE.Vector3(me.x - Math.sin(me.rotY)*camDist, groundHeightAt(me.x,me.z) + camHeight, me.z - Math.cos(me.rotY)*camDist);
+  camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
+  camera.lookAt(new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.15, me.z));
+}
+
+function worldToScreen(vec3){
+  const v = vec3.clone().project(camera);
+  return { x:(v.x*0.5+0.5) * glCanvas.clientWidth, y:(-v.y*0.5+0.5) * glCanvas.clientHeight, behind: v.z > 1 };
+}
+const labelsContainer = document.getElementById('playerLabels');
+const myLabelEl = document.createElement('div');
+myLabelEl.className = 'plabel';
+myLabelEl.innerHTML = `<div class="bub" id="myBub" style="display:none;"></div><div class="nm" id="myNm"></div>`;
+labelsContainer.appendChild(myLabelEl);
+let myBubbleText=null, myBubbleUntil=0;
+
+function updateLabels(){
+  const now = Date.now();
+  const myHead = new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.9, me.z);
+  const s = worldToScreen(myHead);
+  if(!s.behind){
+    myLabelEl.style.left = s.x+'px'; myLabelEl.style.top = s.y+'px'; myLabelEl.style.display='block';
+    document.getElementById('myNm').textContent = myName;
+    const bubEl = document.getElementById('myBub');
+    if(myBubbleUntil > now && myBubbleText){ bubEl.style.display='block'; bubEl.textContent = myBubbleText; } else bubEl.style.display='none';
+  } else myLabelEl.style.display='none';
+
+  Object.keys(remote).forEach(id=>{
+    const r = remote[id];
+    const head = new THREE.Vector3(r.group.position.x, r.group.position.y+1.9, r.group.position.z);
+    const sc = worldToScreen(head);
+    if(sc.behind){ r.labelEl.style.display='none'; return; }
+    r.labelEl.style.display='block';
+    r.labelEl.style.left = sc.x+'px'; r.labelEl.style.top = sc.y+'px';
+    const bubEl = r.labelEl.querySelector('.bub');
+    if(r.bubbleUntil > now && r.bubbleText){ bubEl.style.display='block'; bubEl.textContent = r.bubbleText; } else bubEl.style.display='none';
+  });
+}
+
+function ensureRemoteChar(id, d){
+  if(remote[id]) return remote[id];
+  const def = AVATARS[d.avatarIndex] || AVATARS[0];
+  const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
+  const group = buildCharacter(def, d.level||0, vrmUrl);
+  group.userData._levelUsed = d.level||0;
+  group.userData._vrmUrlUsed = vrmUrl;
+  scene.add(group);
+  const labelEl = document.createElement('div');
+  labelEl.className = 'plabel';
+  labelEl.innerHTML = `<div class="bub" style="display:none;"></div><div class="nm">${escapeHtml(d.name||'???')}</div>`;
+  labelsContainer.appendChild(labelEl);
+  remote[id] = { group, targetX:d.x, targetZ:d.z, targetRotY:d.rotY||0, moving:false, labelEl, bubbleText:null, bubbleUntil:0, updatedAt:Date.now(), name:d.name||'???', outfitHex: def.outfit };
+  return remote[id];
+}
+function removeRemoteChar(id){
+  const r = remote[id]; if(!r) return;
+  scene.remove(r.group); r.labelEl.remove(); delete remote[id];
+}
+
+let lastTime = performance.now();
+function gameLoop(t){
+  try{
+    const dt = Math.min((t-lastTime)/1000, 0.05);
+    lastTime = t;
+    updateMe(dt);
+    Object.values(remote).forEach(r=>{
+      const cx = r.group.position.x, cz = r.group.position.z;
+      const nx = cx + (r.targetX-cx)*Math.min(1,dt*8);
+      const nz = cz + (r.targetZ-cz)*Math.min(1,dt*8);
+      r.group.position.set(nx, groundHeightAt(nx,nz), nz);
+      let diff = r.targetRotY - r.group.rotation.y;
+      while(diff > Math.PI) diff -= Math.PI*2;
+      while(diff < -Math.PI) diff += Math.PI*2;
+      r.group.rotation.y += diff * Math.min(1, dt*10);
+      r.moving = Math.hypot(r.targetX-cx, r.targetZ-cz) > 0.03;
+      updateCharacterAnim(r.group, r.moving, dt);
+    });
+    clouds.forEach(c=>{
+      c.position.x += c.userData.driftSpeed*dt;
+      if(c.position.x > 55) c.position.x = -55;
+    });
+    updateLabels();
+    renderer.render(scene, camera);
+  }catch(err){ console.error('gameLoop error:', err); }
+  if(document.getElementById('room-screen').style.display !== 'none'){ requestAnimationFrame(gameLoop); }
+}
+
+const chatInputWrap = document.getElementById('chatInputWrap');
+const chatInput = document.getElementById('chatInput');
+function openChatInput(){ chatInputWrap.style.display = 'flex'; chatInput.value=''; chatInput.focus(); }
+function closeChatInput(){ chatInputWrap.style.display = 'none'; chatInput.blur(); if(glCanvas) glCanvas.focus(); }
+function confirmChatInput(){
+  const text = chatInput.value.trim().slice(0,140);
+  closeChatInput();
+  if(text) sendChatMessage(text);
+}
+chatInput.addEventListener('keydown', e=>{
+  e.stopPropagation();
+  if(e.key === 'Enter'){ e.preventDefault(); confirmChatInput(); }
+  else if(e.key === 'Escape'){ e.preventDefault(); closeChatInput(); }
+});
+document.getElementById('chatSendBtn').addEventListener('click', confirmChatInput);
+document.getElementById('chatOpenBtn').addEventListener('click', ()=>{
+  if(!currentRoom) return;
+  if(chatInputWrap.style.display === 'flex'){ confirmChatInput(); } else { openChatInput(); }
+});
+function addFeedMsg(name, text, system){
+  const feed = document.getElementById('chatFeed');
+  const el = document.createElement('div');
+  el.className = 'fmsg' + (system?' system':'');
+  el.innerHTML = system ? escapeHtml(text) : `<b>${escapeHtml(name)}:</b> ${escapeHtml(text)}`;
+  feed.appendChild(el);
+  while(feed.children.length > 6) feed.removeChild(feed.firstChild);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .6s'; setTimeout(()=>el.remove(),600); }, 8000);
+}
+async function sendChatMessage(text){
+  const d = {id:myId, name:myName, avatarIndex:myAvatarIndex, text, ts:Date.now()};
+  myBubbleText = text; myBubbleUntil = Date.now()+4500;
+  try{ await db.ref(`rooms/${currentRoom}/messages`).push(d); }
+  catch(err){ console.error('send message error:', err); addFeedMsg(myName, text); addFeedMsg(null, 'a mensagem apareceu só pra você — a sincronização falhou.', true); }
+  db.ref('users/'+myId+'/chatMessageCount').transaction(cur => (cur||0) + 1).catch(()=>{});
+}
+
+async function reportPlayer(id){
+  const r = remote[id];
+  if(!r) return;
+  const reason = prompt('Motivo da denúncia contra ' + r.name + ':');
+  if(!reason || !reason.trim()) return;
+  try{
+    await db.ref('reports').push({
+      reporterUid: myId, reporterName: myName, reportedUid: id, reportedName: r.name,
+      roomId: currentRoom, roomName: document.getElementById('currentRoomName').textContent,
+      reason: reason.trim().slice(0,300), ts: Date.now(), status:'pending'
+    });
+    addFeedMsg(null, 'denúncia enviada para a moderação.', true);
+  }catch(e){ console.error(e); addFeedMsg(null, 'não consegui enviar a denúncia agora.', true); }
+}
+
+let presenceRef=null, playersRef=null, messagesRef=null, metaRef=null, heartbeatTimer=null, playTimeTimer=null;
+async function playTimeTick(){
+  if(!myId || !currentRoom) return;
+  try{
+    await db.ref('users/'+myId+'/totalPlaySeconds').transaction(cur => (cur||0) + 60);
+    await checkAndApplyLevelUp();
+  }catch(e){ console.error('erro no tick de tempo jogado:', e); }
+}
+
+async function cleanupStalePresence(targetRoomId){
+  // clear this session's own listeners/presence if it's sitting in a room already
+  clearInterval(heartbeatTimer);
+  try{
+    if(playersRef) playersRef.off();
+    if(messagesRef) messagesRef.off();
+    if(presenceRef){ await presenceRef.onDisconnect().cancel(); await presenceRef.remove(); }
+  }catch(e){ console.error('cleanup presence error', e); }
+  presenceRef=null; playersRef=null; messagesRef=null;
+
+  // also clear a stale presence left behind by another tab/session for this same account
+  try{
+    const snap = await db.ref('users/'+myId+'/activeRoom').once('value');
+    const staleRoom = snap.val();
+    if(staleRoom && staleRoom !== targetRoomId){
+      await db.ref('rooms/'+staleRoom+'/players/'+myId).remove();
+    }
+  }catch(e){ console.error('cleanup stale room error', e); }
+}
+
+function applyRoomMap(mapId){
+  if(scene && currentWorldMapId === mapId) return; // já é o mapa certo, não precisa reconstruir
+  const mapUrl = mapId ? (mapLibrary[mapId]||{}).url : null;
+  buildWorld(mapUrl);
+  currentWorldMapId = mapId;
+  // a cena é recriada do zero pelo buildWorld — precisa recolocar os personagens que já existiam
+  if(myChar) scene.add(myChar);
+  Object.values(remote).forEach(r=>{ if(r && r.group) scene.add(r.group); });
+  resizeRenderer();
+}
+async function enterRoom(id, name){
+  const count = await countRoomPlayers(id);
+  if(count >= ROOM_CAPACITY){ alert('Essa sala está cheia (50/50). Tenta outra ou espera uma vaga abrir.'); return; }
+
+  await cleanupStalePresence(id);
+
+  currentRoom = id;
+  document.getElementById('lobby-screen').style.display='none';
+  document.getElementById('room-screen').style.display='block';
+  document.getElementById('currentRoomName').textContent = name;
+  document.getElementById('loadingHint').style.display='flex';
+  document.getElementById('loadingHint').textContent = 'carregando o mundo…';
+
+  // O modelo genérico "Soldier" (tryLoadRealisticModel) foi desativado de propósito —
+  // ele não combina com o estilo anime/chibi. Agora o jogo sempre usa buildCharacterPrimitive,
+  // que já foi refeito com visual mais bonito.
+  let roomMapId = null;
+  try{
+    const metaSnap = await db.ref('rooms/'+id+'/meta').once('value');
+    roomMapId = (metaSnap.val()||{}).mapId || null;
+  }catch(e){ console.error('erro ao ler mapa da sala:', e); }
+  applyRoomMap(roomMapId);
+  metaRef = db.ref('rooms/'+id+'/meta');
+  metaRef.on('value', snap=>{
+    const newMapId = (snap.val()||{}).mapId || null;
+    if(currentRoom !== id) return; // já saiu dessa sala, ignora
+    if(!scene || currentWorldMapId === newMapId) return;
+    const hint = document.getElementById('loadingHint');
+    hint.textContent = 'trocando o mapa da sala…';
+    hint.style.display = 'flex';
+    applyRoomMap(newMapId);
+    hint.style.display = 'none';
+  });
+  resizeRenderer();
+  if(myChar) scene.remove(myChar);
+  const vipRowNow = await fetchVipStatus(myId);
+  myVipActiveUntil = vipRowNow.active_until || null;
+  const myVrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
+  myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, myVrmUrl);
+  myChar.userData._levelUsed = myLevel;
+  myChar.userData._vrmUrlUsed = myVrmUrl;
+  scene.add(myChar);
+
+  me.x = (Math.random()*10-5); me.z = 6 + Math.random()*6; me.rotY = 0; me.targetRotY = 0;
+  Object.keys(remote).forEach(removeRemoteChar);
+  document.getElementById('chatFeed').innerHTML='';
+  addFeedMsg(null, 'você entrou na sala.', true);
+
+  document.getElementById('loadingHint').style.display='none';
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+  setTimeout(()=>glCanvas.focus(), 60);
+
+  presenceRef = db.ref(`rooms/${id}/players/${myId}`);
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  try{
+    await presenceRef.set(initialData);
+    presenceRef.onDisconnect().remove();
+    await db.ref('users/'+myId+'/activeRoom').set(id);
+    db.ref('users/'+myId+'/activeRoom').onDisconnect().remove();
+  }catch(e){ console.error('presence set error', e); }
+  heartbeatTimer = setInterval(pushPresence, 150);
+  playTimeTimer = setInterval(playTimeTick, 60000);
+  checkAndApplyLevelUp();
+
+  playersRef = db.ref(`rooms/${id}/players`);
+  playersRef.on('value', snap=>{
+    const val = snap.val() || {};
+    Object.keys(remote).forEach(pid=>{ if(!val[pid]) removeRemoteChar(pid); });
+    Object.keys(val).forEach(pid=>{
+      if(pid===myId) return;
+      const d = val[pid];
+      const r = ensureRemoteChar(pid, d);
+      r.targetX = d.x; r.targetZ = d.z; r.targetRotY = d.rotY||0; r.updatedAt = d.updatedAt;
+      // se o level, o personagem VRM escolhido, ou o status de VIP dela mudou (ex: acabou de ganhar/comprar VIP),
+      // reconstrói o modelo 3D — sem isso o avatar VRM só aparecia se a pessoa saísse e entrasse de novo na sala.
+      const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
+      if(r.group.userData._levelUsed !== (d.level||0) || r.group.userData._vrmUrlUsed !== vrmUrl){
+        scene.remove(r.group);
+        const def = AVATARS[d.avatarIndex] || AVATARS[0];
+        const newGroup = buildCharacter(def, d.level||0, vrmUrl);
+        newGroup.userData._levelUsed = d.level||0;
+        newGroup.userData._vrmUrlUsed = vrmUrl;
+        newGroup.position.copy(r.group.position);
+        newGroup.rotation.copy(r.group.rotation);
+        scene.add(newGroup);
+        r.group = newGroup;
+      }
+    });
+    updatePlayerListUI();
+  });
+
+  messagesRef = db.ref(`rooms/${id}/messages`);
+  const joinedAt = Date.now();
+  messagesRef.orderByChild('ts').startAt(joinedAt).on('child_added', snap=>{
+    const d = snap.val(); if(!d) return;
+    addFeedMsg(d.name, d.text);
+    if(d.id!==myId && remote[d.id]){ remote[d.id].bubbleText = d.text; remote[d.id].bubbleUntil = Date.now()+4500; }
+  });
+}
+async function leaveRoom(){
+  clearInterval(heartbeatTimer);
+  clearInterval(playTimeTimer);
+  try{
+    if(playersRef) playersRef.off();
+    if(messagesRef) messagesRef.off();
+    if(metaRef) metaRef.off();
+    if(presenceRef){ await presenceRef.onDisconnect().cancel(); await presenceRef.remove(); }
+    await db.ref('users/'+myId+'/activeRoom').set(null);
+  }catch(e){ console.error('leave room error', e); }
+  presenceRef=null; playersRef=null; messagesRef=null; metaRef=null;
+  currentRoom = null;
+  document.getElementById('room-screen').style.display='none';
+  document.getElementById('lobby-screen').style.display='flex';
+  refreshRoomList();
+}
+document.getElementById('leaveBtn').addEventListener('click', leaveRoom);
+window.addEventListener('beforeunload', ()=>{ if(presenceRef) presenceRef.remove(); });
+async function pushPresence(){
+  if(!currentRoom || !presenceRef) return;
+  try{ await presenceRef.update({x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()}); }catch(e){}
+}
+function updatePlayerListUI(){
+  const now = Date.now();
+  const active = Object.keys(remote).filter(id => now - remote[id].updatedAt < 9000);
+  document.getElementById('playerCount').textContent = active.length+1;
+  const rows = document.getElementById('playerListRows');
+  rows.innerHTML='';
+  const myDef = AVATARS[myAvatarIndex] || AVATARS[0];
+  const meRow = document.createElement('div'); meRow.className='row';
+  meRow.innerHTML = `<div class="left"><div class="sw" style="background:#${myDef.outfit.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(myName)} (você)</div></div>`;
+  rows.appendChild(meRow);
+  active.forEach(id=>{
+    const r = remote[id];
+    const row = document.createElement('div'); row.className='row';
+    row.innerHTML = `<div class="left"><div class="sw" style="background:#${r.outfitHex.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(r.name)}</div></div><button class="rep" title="denunciar">🚩</button>`;
+    row.querySelector('.rep').addEventListener('click', ()=>reportPlayer(id));
+    rows.appendChild(row);
+  });
+}
+
+const panelModal = document.getElementById('panelModal');
+const panelTabsEl = document.getElementById('panelTabs');
+const panelBodyEl = document.getElementById('panelBody');
+let panelCurrentTab = null;
+
+function openPanel(){
+  panelModal.style.display = 'flex';
+  const tabs = [];
+  if(canSeeRolesTab(myRole)) tabs.push({id:'roles', label:'Cargos'});
+  if(canSeeReportsTab(myRole)) tabs.push({id:'reports', label:'Denúncias'});
+  if(canSeeNewUsersTab(myRole)) tabs.push({id:'newusers', label:'Novos usuários'});
+  if(canManageMaps(myRole)) tabs.push({id:'maps', label:'Mapas'});
+  panelTabsEl.innerHTML='';
+  tabs.forEach((t,i)=>{
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    if(i===0){ b.classList.add('active'); panelCurrentTab = t.id; }
+    b.addEventListener('click', ()=>{
+      panelTabsEl.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active'); panelCurrentTab = t.id; renderPanelTab();
+    });
+    panelTabsEl.appendChild(b);
+  });
+  if(tabs.length===0){ panelBodyEl.innerHTML = '<div class="empty">sem permissões pra ver aqui.</div>'; return; }
+  renderPanelTab();
+}
+document.getElementById('panelBtn').addEventListener('click', openPanel);
+document.getElementById('panelBtnLobby').addEventListener('click', openPanel);
+document.getElementById('panelClose').addEventListener('click', ()=>{ panelModal.style.display='none'; });
+
+async function renderPanelTab(){
+  panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
+  if(panelCurrentTab === 'roles') return renderRolesTab();
+  if(panelCurrentTab === 'reports') return renderReportsTab();
+  if(panelCurrentTab === 'newusers') return renderNewUsersTab();
+  if(panelCurrentTab === 'maps') return renderMapsTab();
+}
+function renderMapsTab(){
+  panelBodyEl.innerHTML = '';
+  const ids = Object.keys(mapLibrary);
+  if(ids.length === 0){
+    const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhum mapa enviado ainda.';
+    panelBodyEl.appendChild(empty);
+  } else {
+    ids.forEach(id=>{
+      const item = mapLibrary[id];
+      const row = document.createElement('div'); row.className='prow';
+      row.innerHTML = `<div class="info">${escapeHtml(item.name||'sem nome')}</div>`;
+      panelBodyEl.appendChild(row);
+    });
+  }
+  const uploadZone = document.createElement('div');
+  uploadZone.style.marginTop = '18px';
+  uploadZone.style.borderTop = '1px dashed var(--line)';
+  uploadZone.style.paddingTop = '14px';
+  uploadZone.innerHTML = `
+    <label>Adicionar novo mapa (.glb)</label>
+    <input type="text" id="mapNameInput" placeholder="nome do mapa" style="margin-top:6px;">
+    <input type="file" id="mapFileInput" accept=".glb" style="display:none;">
+    <button class="btn secondary" id="mapUploadBtn" type="button" style="margin-top:8px;">Escolher arquivo .glb e enviar</button>
+    <div class="errmsg" id="mapLoadMsg"></div>
+  `;
+  panelBodyEl.appendChild(uploadZone);
+  const mapMsgEl = document.getElementById('mapLoadMsg');
+  const mapNameEl = document.getElementById('mapNameInput');
+  document.getElementById('mapUploadBtn').addEventListener('click', ()=> document.getElementById('mapFileInput').click());
+  document.getElementById('mapFileInput').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(file) uploadMapToLibrary(file, mapNameEl, mapMsgEl);
+  });
+}
+
+async function renderRolesTab(){
+  let snap;
+  try{ snap = await db.ref('users').once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar usuários.</div>'; return; }
+  const val = snap.val() || {};
+  panelBodyEl.innerHTML='';
+  const canLevel = canTestAura(myRole);
+  const canVip = canGrantVip(myRole);
+  Object.keys(val).forEach(uid=>{
+    const u = val[uid];
+    const options = assignableRoles(myRole, u.role);
+    const row = document.createElement('div'); row.className='prow';
+    const roleInfo = ROLES[u.role]||ROLES.player;
+
+    let vipSel, vipBtn;
+    if(canVip){
+      vipSel = document.createElement('select');
+      Object.keys(VIP_NAMES).forEach(tier=>{ const o=document.createElement('option'); o.value=tier; o.textContent='VIP '+VIP_NAMES[tier]; vipSel.appendChild(o); });
+      vipBtn = document.createElement('button'); vipBtn.className='mini-btn ok'; vipBtn.textContent='conceder VIP';
+      vipBtn.addEventListener('click', async ()=>{
+        vipBtn.textContent='enviando…';
+        try{
+          const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-grant-vip', {
+            method:'POST', headers: edgeFunctionHeaders(),
+            body: JSON.stringify({targetUid: uid, tier: vipSel.value, grantedBy: myId})
+          });
+          if(!resp.ok) throw new Error('falha na requisição');
+          vipBtn.textContent='✓ concedido';
+          setTimeout(()=>{ vipBtn.textContent='conceder VIP'; }, 1500);
+        }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; }
+      });
+    }
+
+    let levelSel, levelBtn;
+    if(canLevel){
+      levelSel = document.createElement('select');
+      LEVELS.forEach(lv=>{ const o=document.createElement('option'); o.value=lv.level; o.textContent = `Nv ${lv.level} — ${lv.name}`; if((u.level||0)===lv.level) o.selected=true; levelSel.appendChild(o); });
+      levelBtn = document.createElement('button'); levelBtn.className='mini-btn ok'; levelBtn.textContent='salvar nível';
+      levelBtn.addEventListener('click', async ()=>{
+        try{ await db.ref('users/'+uid+'/level').set(parseInt(levelSel.value,10)); levelBtn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+        catch(e){ console.error(e); levelBtn.textContent='erro'; }
+      });
+    }
+
+    if(options.length){
+      const sel = document.createElement('select');
+      options.forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=ROLES[r].label; if(r===u.role) o.selected=true; sel.appendChild(o); });
+      const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='salvar';
+      btn.addEventListener('click', async ()=>{
+        try{ await db.ref('users/'+uid+'/role').set(sel.value); btn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+        catch(e){ console.error(e); btn.textContent='erro'; }
+      });
+      row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div>`;
+      const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
+      right.appendChild(sel); right.appendChild(btn);
+      if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
+      if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); }
+      row.appendChild(right);
+    } else {
+      row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
+      if(canLevel || canVip){
+        const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
+        if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
+        if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); }
+        row.appendChild(right);
+      }
+    }
+    panelBodyEl.appendChild(row);
+  });
+  if(Object.keys(val).length===0) panelBodyEl.innerHTML = '<div class="empty">nenhum usuário cadastrado ainda.</div>';
+}
+
+async function renderReportsTab(){
+  let snap;
+  try{ snap = await db.ref('reports').orderByChild('ts').once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar denúncias.</div>'; return; }
+  const val = snap.val() || {};
+  const items = Object.keys(val).map(id=>({id, ...val[id]})).sort((a,b)=>b.ts-a.ts);
+  panelBodyEl.innerHTML='';
+  if(items.length===0){ panelBodyEl.innerHTML = '<div class="empty">nenhuma denúncia registrada.</div>'; return; }
+  items.forEach(r=>{
+    const row = document.createElement('div'); row.className='prow';
+    const when = new Date(r.ts).toLocaleString('pt-BR');
+    row.innerHTML = `<div class="info"><b>${escapeHtml(r.reportedName)}</b> denunciado por ${escapeHtml(r.reporterName)}
+      <div class="sub">${escapeHtml(r.reason)} — sala: ${escapeHtml(r.roomName||'?')} — ${when} — status: ${r.status}</div></div>`;
+    if(r.status === 'pending'){
+      const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='marcar resolvida';
+      btn.addEventListener('click', async ()=>{
+        try{ await db.ref('reports/'+r.id+'/status').set('resolved'); renderReportsTab(); }catch(e){ console.error(e); }
+      });
+      row.appendChild(btn);
+    }
+    panelBodyEl.appendChild(row);
+  });
+}
+
+async function renderNewUsersTab(){
+  let snap;
+  try{ snap = await db.ref('users').orderByChild('isNew').equalTo(true).once('value'); }catch(e){ panelBodyEl.innerHTML='<div class="empty">erro ao carregar usuários novos.</div>'; return; }
+  const val = snap.val() || {};
+  panelBodyEl.innerHTML='';
+  const uids = Object.keys(val);
+  if(uids.length===0){ panelBodyEl.innerHTML = '<div class="empty">nenhum usuário novo no momento.</div>'; return; }
+  uids.forEach(uid=>{
+    const u = val[uid];
+    const row = document.createElement('div'); row.className='prow';
+    const when = new Date(u.createdAt).toLocaleString('pt-BR');
+    row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')} — cadastrado em ${when}</div></div>`;
+    const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='marcar como orientado';
+    btn.addEventListener('click', async ()=>{
+      try{ await db.ref('users/'+uid+'/isNew').set(false); renderNewUsersTab(); }catch(e){ console.error(e); }
+    });
+    row.appendChild(btn);
+    panelBodyEl.appendChild(row);
+  });
+}
+
+initAvatarPreview();
+updateAvatarLabel();
+</script>
+</body>
+</html>
