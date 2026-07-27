@@ -350,6 +350,14 @@ const supabaseClient = window.supabase.createClient(
   'sb_publishable_YyyANARR5-cTwVobklEnVg_6FKINrce'
 );
 const EDGE_FUNCTIONS_BASE = 'https://jsviqlxzjrlhvmubxwep.supabase.co/functions/v1';
+const SUPABASE_ANON_KEY = 'sb_publishable_YyyANARR5-cTwVobklEnVg_6FKINrce';
+function edgeFunctionHeaders(){
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+  };
+}
 const VIP_PRICES = {'1week':4.90, '1month':14.90, '5months':69.90, '1year':146.90, '2years':268.90};
 const VIP_NAMES = {'1week':'1 semana', '1month':'1 mês', '5months':'5 meses', '1year':'1 ano', '2years':'2 anos'};
 </script>
@@ -513,7 +521,7 @@ async function checkAndApplyLevelUp(){
     if(days >= 180 && !vipRow.freeGrant6moUsed && boughtAnyVipWithinDays(profile, 90)){
       try{
         const resp = await fetch(EDGE_FUNCTIONS_BASE+'/grant-free-vip', {
-          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uid: myId})
+          method:'POST', headers: edgeFunctionHeaders(), body: JSON.stringify({uid: myId})
         });
         if(resp.ok){
           const fresh = await fetchVipStatus(myId);
@@ -913,7 +921,7 @@ async function buyVip(tier){
   msg.style.color = 'var(--text-dim)'; msg.textContent = 'gerando pagamento…';
   try{
     const resp = await fetch(EDGE_FUNCTIONS_BASE+'/create-vip-payment', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers: edgeFunctionHeaders(),
       body: JSON.stringify({uid: myId, tier})
     });
     const data = await resp.json();
@@ -2242,7 +2250,7 @@ async function renderRolesTab(){
         vipBtn.textContent='enviando…';
         try{
           const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-grant-vip', {
-            method:'POST', headers:{'Content-Type':'application/json'},
+            method:'POST', headers: edgeFunctionHeaders(),
             body: JSON.stringify({targetUid: uid, tier: vipSel.value, grantedBy: myId})
           });
           if(!resp.ok) throw new Error('falha na requisição');
