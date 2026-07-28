@@ -787,11 +787,38 @@ function renderVrmLibraryList(){
     const item = vrmLibrary[id];
     const row = document.createElement('div');
     row.className = 'room-item'; row.style.cursor = 'pointer';
+    row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between'; row.style.gap = '8px';
     if(selectedVrmId2 === id) row.style.borderColor = 'var(--nebula-soft)';
-    row.innerHTML = `<div class="rn">${escapeHtml(item.name||'sem nome')}</div>`;
-    row.onclick = ()=>{ selectedVrmId2 = id; renderVrmLibraryList(); rebuildAvatarPreviewChar2(); };
+    const label = document.createElement('div'); label.className = 'rn'; label.textContent = item.name||'sem nome';
+    row.appendChild(label);
+    row.addEventListener('click', ()=>{ selectedVrmId2 = id; renderVrmLibraryList(); rebuildAvatarPreviewChar2(); });
+    if(canManageVRM(myRole)){
+      const delBtn = document.createElement('button');
+      delBtn.className = 'mini-btn warn'; delBtn.textContent = 'apagar';
+      delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteVrmFromLibrary(id, item.url); });
+      row.appendChild(delBtn);
+    }
     el.appendChild(row);
   });
+}
+async function deleteVrmFromLibrary(id, url){
+  const msgEl = document.getElementById('vrmLoadMsg');
+  const path = pathFromAssetUrl(url, 'vrm-characters');
+  if(!path){ if(msgEl){ msgEl.style.color='var(--danger)'; msgEl.textContent='não consegui identificar o arquivo pra apagar.'; } return; }
+  if(!confirm('Apagar esse personagem VRM? Isso não pode ser desfeito.')) return;
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-upload-asset', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({action:'delete', uploaderUid: myId, assetType:'vrm', id, path})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha ao apagar');
+    if(selectedVrmId2 === id){ selectedVrmId2 = null; }
+    loadVrmLibraryOnce();
+  }catch(err){
+    console.error('erro ao apagar vrm:', err);
+    if(msgEl){ msgEl.style.color='var(--danger)'; msgEl.textContent='erro ao apagar (veja o Console/F12 pra detalhes).'; }
+  }
 }
 function vrmRowsToLibrary(rows){
   const lib = {};
@@ -834,60 +861,94 @@ function startMapLibraryListener(){
     .subscribe();
 }
 startMapLibraryListener();
-function uploadMapToLibrary(file, nameInputEl, msgEl){
+function pathFromAssetUrl(url, bucket){
+  const marker = '/' + bucket + '/';
+  const idx = (url||'').indexOf(marker);
+  return idx >= 0 ? url.slice(idx + marker.length) : null;
+}
+async function uploadMapToLibrary(file, nameInputEl, msgEl){
   const name = (nameInputEl.value||'').trim().slice(0,24) || file.name.replace(/\.glb$/i,'').slice(0,24);
   msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'enviando mapa…';
-  const id = 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  const path = id + '.glb';
-  supabaseClient.storage.from('game-maps').upload(path, file, {contentType:'model/gltf-binary'})
-    .then(({error})=>{
-      if(error) throw error;
-      const {data} = supabaseClient.storage.from('game-maps').getPublicUrl(path);
-      return supabaseClient.from('game_maps').insert({id, name, url:data.publicUrl, added_by:myId, added_at:Date.now()});
-    })
-    .then(({error})=>{
-      if(error) throw error;
-    })
-    .then(()=>{
-      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'mapa enviado! já aparece pra escolher ao criar sala.';
-      nameInputEl.value = '';
-      loadMapLibraryOnce();
-    })
-    .catch(err=>{
-      console.error('erro ao enviar mapa:', err);
-      msgEl.style.color = 'var(--danger)';
-      msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+  try{
+    const startResp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-upload-asset', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({action:'start', uploaderUid: myId, assetType:'map', fileExt:'glb'})
     });
+    const startData = await startResp.json();
+    if(!startResp.ok) throw new Error(startData.error || 'falha ao iniciar envio');
+
+    const { error: upErr } = await supabaseClient.storage.from('game-maps')
+      .uploadToSignedUrl(startData.path, startData.token, file, {contentType:'model/gltf-binary'});
+    if(upErr) throw upErr;
+
+    const finishResp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-upload-asset', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({action:'finish', uploaderUid: myId, assetType:'map', id: startData.id, path: startData.path, name})
+    });
+    const finishData = await finishResp.json();
+    if(!finishResp.ok) throw new Error(finishData.error || 'falha ao concluir envio');
+
+    msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'mapa enviado! já aparece pra escolher ao criar sala.';
+    nameInputEl.value = '';
+    loadMapLibraryOnce();
+  }catch(err){
+    console.error('erro ao enviar mapa:', err);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+  }
+}
+async function deleteMapFromLibrary(id, url, msgEl){
+  const path = pathFromAssetUrl(url, 'game-maps');
+  if(!path){ if(msgEl){ msgEl.style.color='var(--danger)'; msgEl.textContent='não consegui identificar o arquivo pra apagar.'; } return; }
+  if(!confirm('Apagar esse mapa? Isso não pode ser desfeito.')) return;
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-upload-asset', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({action:'delete', uploaderUid: myId, assetType:'map', id, path})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha ao apagar');
+    loadMapLibraryOnce();
+  }catch(err){
+    console.error('erro ao apagar mapa:', err);
+    if(msgEl){ msgEl.style.color='var(--danger)'; msgEl.textContent='erro ao apagar (veja o Console/F12 pra detalhes).'; }
+  }
 }
 function renderMapsTab_ifOpen(){
   if(typeof panelCurrentTab !== 'undefined' && panelCurrentTab === 'maps') renderMapsTab();
 }
-function uploadVRMToLibrary(file){
+async function uploadVRMToLibrary(file){
   const msgEl = document.getElementById('vrmLoadMsg');
   const nameInput = document.getElementById('vrmNameInput');
   const name = (nameInput.value||'').trim().slice(0,24) || file.name.replace(/\.vrm$/i,'').slice(0,24);
   msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'enviando personagem…';
-  const id = 'vrm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  const path = id + '.vrm';
-  supabaseClient.storage.from('vrm-characters').upload(path, file, {contentType:'model/gltf-binary'})
-    .then(({error})=>{
-      if(error) throw error;
-      const {data} = supabaseClient.storage.from('vrm-characters').getPublicUrl(path);
-      return supabaseClient.from('vrm_characters').insert({id, name, url:data.publicUrl, added_by:myId, added_at:Date.now()});
-    })
-    .then(({error})=>{
-      if(error) throw error;
-    })
-    .then(()=>{
-      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'personagem enviado! já aparece na lista pra todo mundo escolher.';
-      nameInput.value = '';
-      loadVrmLibraryOnce();
-    })
-    .catch(err=>{
-      console.error('erro ao enviar VRM:', err);
-      msgEl.style.color = 'var(--danger)';
-      msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+  try{
+    const startResp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-upload-asset', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({action:'start', uploaderUid: myId, assetType:'vrm', fileExt:'vrm'})
     });
+    const startData = await startResp.json();
+    if(!startResp.ok) throw new Error(startData.error || 'falha ao iniciar envio');
+
+    const { error: upErr } = await supabaseClient.storage.from('vrm-characters')
+      .uploadToSignedUrl(startData.path, startData.token, file, {contentType:'model/gltf-binary'});
+    if(upErr) throw upErr;
+
+    const finishResp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-upload-asset', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({action:'finish', uploaderUid: myId, assetType:'vrm', id: startData.id, path: startData.path, name})
+    });
+    const finishData = await finishResp.json();
+    if(!finishResp.ok) throw new Error(finishData.error || 'falha ao concluir envio');
+
+    msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'personagem enviado! já aparece na lista pra todo mundo escolher.';
+    nameInput.value = '';
+    loadVrmLibraryOnce();
+  }catch(err){
+    console.error('erro ao enviar VRM:', err);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'erro ao enviar (veja o Console/F12 pra detalhes).';
+  }
 }
 document.getElementById('vrmUploadBtn').addEventListener('click', ()=> document.getElementById('vrmFileInput').click());
 document.getElementById('vrmFileInput').addEventListener('change', e=>{
@@ -2227,7 +2288,15 @@ function renderMapsTab(){
     ids.forEach(id=>{
       const item = mapLibrary[id];
       const row = document.createElement('div'); row.className='prow';
-      row.innerHTML = `<div class="info">${escapeHtml(item.name||'sem nome')}</div>`;
+      row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between'; row.style.gap = '8px';
+      const info = document.createElement('div'); info.className='info'; info.textContent = item.name||'sem nome';
+      row.appendChild(info);
+      if(canManageMaps(myRole)){
+        const delBtn = document.createElement('button');
+        delBtn.className = 'mini-btn warn'; delBtn.textContent = 'apagar';
+        delBtn.addEventListener('click', ()=> deleteMapFromLibrary(id, item.url, document.getElementById('mapLoadMsg')));
+        row.appendChild(delBtn);
+      }
       panelBodyEl.appendChild(row);
     });
   }
@@ -2277,11 +2346,10 @@ async function renderRolesTab(){
             method:'POST', headers: edgeFunctionHeaders(),
             body: JSON.stringify({targetUid: uid, tier: vipSel.value, grantedBy: myId})
           });
-          const json = await resp.json().catch(()=>({}));
-          if(!resp.ok) throw new Error(json.error ? (json.error + (json.details ? ' — '+json.details : '')) : 'falha na requisição ('+resp.status+')');
+          if(!resp.ok) throw new Error('falha na requisição');
           vipBtn.textContent='✓ concedido';
           setTimeout(()=>{ vipBtn.textContent='conceder VIP'; }, 1500);
-        }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; vipBtn.title = e.message||''; alert('Erro ao conceder VIP: '+(e.message||e)); }
+        }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; }
       });
 
       vipRemoveBtn = document.createElement('button'); vipRemoveBtn.className='mini-btn warn'; vipRemoveBtn.textContent='remover VIP';
@@ -2293,11 +2361,10 @@ async function renderRolesTab(){
             method:'POST', headers: edgeFunctionHeaders(),
             body: JSON.stringify({targetUid: uid, revokedBy: myId})
           });
-          const json = await resp.json().catch(()=>({}));
-          if(!resp.ok) throw new Error(json.error ? (json.error + (json.details ? ' — '+json.details : '')) : 'falha na requisição ('+resp.status+')');
+          if(!resp.ok) throw new Error('falha na requisição');
           vipRemoveBtn.textContent='✓ removido';
           setTimeout(()=>{ vipRemoveBtn.textContent='remover VIP'; }, 1500);
-        }catch(e){ console.error('erro ao remover vip:', e); vipRemoveBtn.textContent='erro'; alert('Erro ao remover VIP: '+(e.message||e)); }
+        }catch(e){ console.error('erro ao remover vip:', e); vipRemoveBtn.textContent='erro'; }
       });
     }
 
