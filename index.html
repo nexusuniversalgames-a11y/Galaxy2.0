@@ -2277,10 +2277,11 @@ async function renderRolesTab(){
             method:'POST', headers: edgeFunctionHeaders(),
             body: JSON.stringify({targetUid: uid, tier: vipSel.value, grantedBy: myId})
           });
-          if(!resp.ok) throw new Error('falha na requisição');
+          const json = await resp.json().catch(()=>({}));
+          if(!resp.ok) throw new Error(json.error ? (json.error + (json.details ? ' — '+json.details : '')) : 'falha na requisição ('+resp.status+')');
           vipBtn.textContent='✓ concedido';
           setTimeout(()=>{ vipBtn.textContent='conceder VIP'; }, 1500);
-        }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; }
+        }catch(e){ console.error('erro ao conceder vip:', e); vipBtn.textContent='erro'; vipBtn.title = e.message||''; alert('Erro ao conceder VIP: '+(e.message||e)); }
       });
 
       vipRemoveBtn = document.createElement('button'); vipRemoveBtn.className='mini-btn warn'; vipRemoveBtn.textContent='remover VIP';
@@ -2292,10 +2293,11 @@ async function renderRolesTab(){
             method:'POST', headers: edgeFunctionHeaders(),
             body: JSON.stringify({targetUid: uid, revokedBy: myId})
           });
-          if(!resp.ok) throw new Error('falha na requisição');
+          const json = await resp.json().catch(()=>({}));
+          if(!resp.ok) throw new Error(json.error ? (json.error + (json.details ? ' — '+json.details : '')) : 'falha na requisição ('+resp.status+')');
           vipRemoveBtn.textContent='✓ removido';
           setTimeout(()=>{ vipRemoveBtn.textContent='remover VIP'; }, 1500);
-        }catch(e){ console.error('erro ao remover vip:', e); vipRemoveBtn.textContent='erro'; }
+        }catch(e){ console.error('erro ao remover vip:', e); vipRemoveBtn.textContent='erro'; alert('Erro ao remover VIP: '+(e.message||e)); }
       });
     }
 
