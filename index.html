@@ -206,6 +206,8 @@
       <div class="lobby-head">
         <h1 class="pixel">SALAS</h1>
         <div class="head-actions">
+          <button id="openProfileBtnLobby">perfil</button>
+          <button id="openHelpBtnLobby">ajuda</button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
           <button id="panelBtnLobby" style="display:none;">painel</button>
@@ -324,6 +326,55 @@
     </div>
   </div>
 </div>
+
+<div id="helpModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Ajuda</h2><button id="helpModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="hint" style="margin-bottom:12px;">Precisando de ajuda dentro do jogo? Essas pessoas fazem parte da equipe e podem te dar uma força.</div>
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <button class="mini-btn" id="helpTabMentores">Mentores</button>
+        <button class="mini-btn" id="helpTabMods">Moderadores</button>
+      </div>
+      <div id="helpStaffList" style="display:flex; flex-direction:column; gap:6px; max-height:320px; overflow:auto;">
+        <div class="empty" style="padding:8px 0;">carregando…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="profileModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2 id="profileModalTitle">Perfil</h2><button id="profileModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="avatar-stage" style="margin:0 auto;"><canvas id="profilePreview"></canvas></div>
+      <div id="profileNameRow" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px;">
+        <div class="avatar-name" id="profileNameText">—</div>
+        <button class="mini-btn" id="profileEditNameBtn" style="display:none;">trocar</button>
+      </div>
+      <div id="profileEditNameZone" style="display:none; margin-top:8px;">
+        <input type="text" id="profileNameInput" maxlength="24" placeholder="novo nome">
+        <div class="hint" id="profileNameCostHint"></div>
+        <button class="btn secondary" id="profileNameSaveBtn" style="margin-top:6px;">Confirmar troca</button>
+      </div>
+      <div id="profileBadges" style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;"></div>
+      <div id="profileCoinsLine" style="text-align:center; margin-top:8px; font-size:13px; color:var(--nebula-soft);"></div>
+      <div id="profileFriendActionZone" style="margin-top:12px; text-align:center;"></div>
+      <div id="profileFriendsSection" style="margin-top:18px; border-top:1px dashed var(--line); padding-top:14px; display:none;">
+        <label>Pedidos de amizade</label>
+        <div id="friendRequestsList" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+          <div class="empty" style="padding:6px 0;">nenhum pedido pendente.</div>
+        </div>
+        <label style="margin-top:14px; display:block;">Amigos</label>
+        <div id="friendsListEl" style="display:flex; flex-direction:column; gap:6px; margin-top:6px; max-height:180px; overflow:auto;">
+          <div class="empty" style="padding:6px 0;">você ainda não tem amigos adicionados.</div>
+        </div>
+      </div>
+      <div class="errmsg" id="profileMsg"></div>
+    </div>
+  </div>
+</div>
+
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -541,6 +592,7 @@ async function checkAndApplyLevelUp(){
     }
     myLevel = newLevel;
     myVipActiveUntil = profile.vipActiveUntil || null;
+    myVipTier = profile.vipTier || null;
     const lvBadge = document.getElementById('whoLevel');
     if(lvBadge){ const lv = levelInfo(myLevel); lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`; }
     const vrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
@@ -1194,6 +1246,47 @@ document.getElementById('nextAvatar2').addEventListener('click', ()=>{ avatarInd
 document.getElementById('prevLevel2').addEventListener('click', ()=>{ levelIndex2 = (levelIndex2 - 1 + LEVELS.length) % LEVELS.length; updateLevelLabel2(); });
 document.getElementById('nextLevel2').addEventListener('click', ()=>{ levelIndex2 = (levelIndex2 + 1) % LEVELS.length; updateLevelLabel2(); });
 const avatarModal = document.getElementById('avatarModal');
+
+// --- terceiro preview (usado na tela de perfil, pra ver o próprio personagem
+// ou o de outra pessoa com mais detalhe) ---
+let previewScene3, previewCamera3, previewRenderer3, previewChar3, preview3Active = false, avatarPreview3Inited = false;
+function initAvatarPreview3(){
+  const canvas = document.getElementById('profilePreview');
+  previewScene3 = new THREE.Scene();
+  previewCamera3 = new THREE.PerspectiveCamera(35, 150/170, 0.1, 20);
+  previewCamera3.position.set(0, 1.3, 2.6);
+  previewCamera3.lookAt(0,1.05,0);
+  previewRenderer3 = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  previewRenderer3.setSize(150,170,false);
+  previewRenderer3.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x22264a, 1.0);
+  previewScene3.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+  dir.position.set(2,3,2);
+  previewScene3.add(dir);
+  requestAnimationFrame(previewLoop3);
+}
+function setProfilePreviewChar(avIndex, level, vrmUrl){
+  if(!avatarPreview3Inited){ initAvatarPreview3(); avatarPreview3Inited = true; }
+  if(previewChar3) previewScene3.remove(previewChar3);
+  previewChar3 = buildCharacter(AVATARS[avIndex] || AVATARS[0], level, vrmUrl);
+  if(previewChar3.userData.kind === 'realistic'){ previewChar3.scale.set(0.9,0.9,0.9); }
+  previewScene3.add(previewChar3);
+}
+let preview3T = 0, preview3LastT = performance.now();
+function previewLoop3(t){
+  const dt = Math.min((t-preview3LastT)/1000, 0.05); preview3LastT = t;
+  if(preview3Active){
+    preview3T += dt;
+    if(previewChar3){
+      previewChar3.rotation.y = Math.sin(preview3T*0.6)*0.5;
+      updateCharacterAnim(previewChar3, true, dt);
+    }
+    previewRenderer3.render(previewScene3, previewCamera3);
+  }
+  requestAnimationFrame(previewLoop3);
+}
+document.getElementById('openProfileBtnLobby').addEventListener('click', ()=>openProfileModal(myId));
 document.getElementById('changeAvatarBtn').addEventListener('click', ()=>{
   avatarIndex2 = myAvatarIndex;
   levelIndex2 = myLevel;
@@ -1346,7 +1439,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 
 document.getElementById('signOutBtn').addEventListener('click', ()=>{ auth.signOut(); });
 
-let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null, myVipActiveUntil = null;
+let myId = null, myName = '', myAvatarIndex = 0, myRole = 'player', myLevel = 0, myIsNew = false, myVrmId = null, myVipActiveUntil = null, myVipTier = null;
 
 auth.onAuthStateChanged(async (user)=>{
   if(user){
@@ -1371,7 +1464,7 @@ auth.onAuthStateChanged(async (user)=>{
     }
     myId = user.uid;
     myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
-    fetchVipStatus(myId).then(v=>{ myVipActiveUntil = v.active_until||null; });
+    fetchVipStatus(myId).then(v=>{ myVipActiveUntil = v.active_until||null; myVipTier = v.tier||null; });
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
@@ -2035,7 +2128,7 @@ function ensureRemoteChar(id, d){
   labelEl.className = 'plabel';
   labelEl.innerHTML = `<div class="bub" style="display:none;"></div><div class="nm">${escapeHtml(d.name||'???')}</div>`;
   labelsContainer.appendChild(labelEl);
-  remote[id] = { group, targetX:d.x, targetZ:d.z, targetRotY:d.rotY||0, moving:false, labelEl, bubbleText:null, bubbleUntil:0, updatedAt:Date.now(), name:d.name||'???', outfitHex: def.outfit };
+  remote[id] = { group, targetX:d.x, targetZ:d.z, targetRotY:d.rotY||0, moving:false, labelEl, bubbleText:null, bubbleUntil:0, updatedAt:Date.now(), name:d.name||'???', outfitHex: def.outfit, level:d.level||0, vrmId:d.vrmId||null, vipActiveUntil:d.vipActiveUntil||null, avatarIndex:d.avatarIndex||0, role:d.role||'player' };
   return remote[id];
 }
 function removeRemoteChar(id){
@@ -2199,6 +2292,7 @@ async function enterRoom(id, name){
   if(myChar) scene.remove(myChar);
   const vipRowNow = await fetchVipStatus(myId);
   myVipActiveUntil = vipRowNow.active_until || null;
+  myVipTier = vipRowNow.tier || null;
   const myVrmUrl = resolveVrmUrl(myVrmId, myVipActiveUntil);
   myChar = buildCharacter(AVATARS[myAvatarIndex] || AVATARS[0], myLevel, myVrmUrl);
   myChar.userData._levelUsed = myLevel;
@@ -2216,7 +2310,7 @@ async function enterRoom(id, name){
   setTimeout(()=>glCanvas.focus(), 60);
 
   presenceRef = db.ref(`rooms/${id}/players/${myId}`);
-  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null, x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
+  const initialData = {id:myId, name:myName, avatarIndex:myAvatarIndex, level:myLevel, vrmId: myVrmId||null, vipActiveUntil: myVipActiveUntil||null, role: myRole||'player', x:me.x, z:me.z, rotY:me.rotY, updatedAt:Date.now()};
   try{
     await presenceRef.set(initialData);
     presenceRef.onDisconnect().remove();
@@ -2236,6 +2330,7 @@ async function enterRoom(id, name){
       const d = val[pid];
       const r = ensureRemoteChar(pid, d);
       r.targetX = d.x; r.targetZ = d.z; r.targetRotY = d.rotY||0; r.updatedAt = d.updatedAt;
+      r.level = d.level||0; r.vrmId = d.vrmId||null; r.vipActiveUntil = d.vipActiveUntil||null; r.avatarIndex = d.avatarIndex||0; r.name = d.name||r.name; r.role = d.role||'player';
       // se o level, o personagem VRM escolhido, ou o status de VIP dela mudou (ex: acabou de ganhar/comprar VIP),
       // reconstrói o modelo 3D — sem isso o avatar VRM só aparecia se a pessoa saísse e entrasse de novo na sala.
       const vrmUrl = resolveVrmUrl(d.vrmId, d.vipActiveUntil);
@@ -2292,14 +2387,291 @@ function updatePlayerListUI(){
   rows.innerHTML='';
   const myDef = AVATARS[myAvatarIndex] || AVATARS[0];
   const meRow = document.createElement('div'); meRow.className='row';
-  meRow.innerHTML = `<div class="left"><div class="sw" style="background:#${myDef.outfit.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(myName)} (você)</div></div>`;
+  meRow.innerHTML = `<div class="left"><div class="sw" style="background:#${myDef.outfit.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(myName)} (você)</div></div><button class="rep" title="ver perfil">👤</button>`;
+  meRow.querySelector('.rep').addEventListener('click', ()=>openProfileModal(myId));
   rows.appendChild(meRow);
   active.forEach(id=>{
     const r = remote[id];
     const row = document.createElement('div'); row.className='row';
-    row.innerHTML = `<div class="left"><div class="sw" style="background:#${r.outfitHex.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(r.name)}</div></div><button class="rep" title="denunciar">🚩</button>`;
-    row.querySelector('.rep').addEventListener('click', ()=>reportPlayer(id));
+    row.innerHTML = `<div class="left"><div class="sw" style="background:#${r.outfitHex.toString(16).padStart(6,'0')}"></div><div>${escapeHtml(r.name)}</div></div><button class="rep" title="ver perfil">👤</button><button class="rep" title="denunciar">🚩</button>`;
+    row.querySelectorAll('.rep')[0].addEventListener('click', ()=>openProfileModal(id));
+    row.querySelectorAll('.rep')[1].addEventListener('click', ()=>reportPlayer(id));
     rows.appendChild(row);
+  });
+}
+
+// ============ Perfil ============
+const profileModal = document.getElementById('profileModal');
+let profileViewingUid = null;
+let profileFriendReqRef = null, profileFriendsListRef = null;
+
+function closeProfileModal(){
+  profileModal.style.display = 'none';
+  preview3Active = false;
+  if(profileFriendReqRef){ profileFriendReqRef.off(); profileFriendReqRef = null; }
+  if(profileFriendsListRef){ profileFriendsListRef.off(); profileFriendsListRef = null; }
+}
+document.getElementById('profileModalClose').addEventListener('click', closeProfileModal);
+
+async function openProfileModal(uid){
+  profileViewingUid = uid;
+  profileModal.style.display = 'flex';
+  preview3Active = true;
+  document.getElementById('profileMsg').textContent = '';
+  document.getElementById('profileEditNameZone').style.display = 'none';
+  document.getElementById('profileNameInput').value = '';
+
+  const isMe = uid === myId;
+  let name, level, avIndex, vrmId, vipActiveUntil, role;
+  if(isMe){
+    name = myName; level = myLevel; avIndex = myAvatarIndex; vrmId = myVrmId; vipActiveUntil = myVipActiveUntil; role = myRole;
+  } else {
+    const r = remote[uid];
+    if(!r){ document.getElementById('profileMsg').textContent = 'esse jogador não está mais na sala.'; return; }
+    name = r.name; level = r.level; avIndex = r.avatarIndex; vrmId = r.vrmId; vipActiveUntil = r.vipActiveUntil; role = r.role;
+  }
+
+  document.getElementById('profileModalTitle').textContent = isMe ? 'Seu perfil' : ('Perfil de ' + name);
+  document.getElementById('profileNameText').textContent = name;
+  document.getElementById('profileEditNameBtn').style.display = isMe ? 'inline-block' : 'none';
+
+  const vrmUrl = resolveVrmUrl(vrmId, vipActiveUntil);
+  setProfilePreviewChar(avIndex, level, vrmUrl);
+
+  const lv = levelInfo(level);
+  const badges = document.getElementById('profileBadges');
+  badges.innerHTML = '';
+  if(role && role !== 'player'){
+    const roleInfo = ROLES[role] || ROLES.player;
+    const roleBadge = document.createElement('span'); roleBadge.className='role-badge';
+    roleBadge.style.background = roleInfo.color+'33'; roleBadge.style.color = roleInfo.color;
+    roleBadge.textContent = roleInfo.label;
+    badges.appendChild(roleBadge);
+  }
+  const lvBadge = document.createElement('span'); lvBadge.className='role-badge';
+  lvBadge.style.background='var(--nebula-soft)33'; lvBadge.style.color='var(--nebula-soft)';
+  lvBadge.textContent = `Nv ${lv.level} — ${lv.name}`;
+  badges.appendChild(lvBadge);
+  const vipActive = vipActiveUntil && vipActiveUntil > Date.now();
+  if(vipActive){
+    const vipBadge = document.createElement('span'); vipBadge.className='role-badge';
+    vipBadge.style.background='var(--gold)33'; vipBadge.style.color='var(--gold)';
+    vipBadge.textContent = '✨ VIP ativo';
+    badges.appendChild(vipBadge);
+  }
+
+  const coinsLine = document.getElementById('profileCoinsLine');
+  const friendsSection = document.getElementById('profileFriendsSection');
+
+  if(isMe){
+    friendsSection.style.display = 'block';
+    document.getElementById('profileFriendActionZone').innerHTML = '';
+    coinsLine.textContent = 'carregando saldo…';
+    try{
+      const { data } = await supabaseClient.from('coin_balance').select('*').eq('uid', myId).maybeSingle();
+      coinsLine.textContent = '🪙 ' + (data && data.balance ? data.balance : 0) + ' moedas';
+    }catch(e){ console.error(e); coinsLine.textContent = ''; }
+    watchOwnFriendsAndRequests();
+  } else {
+    friendsSection.style.display = 'none';
+    coinsLine.textContent = '';
+    if(profileFriendReqRef){ profileFriendReqRef.off(); profileFriendReqRef = null; }
+    if(profileFriendsListRef){ profileFriendsListRef.off(); profileFriendsListRef = null; }
+    renderFriendActionButton(uid, name);
+  }
+}
+
+document.getElementById('profileEditNameBtn').addEventListener('click', ()=>{
+  const zone = document.getElementById('profileEditNameZone');
+  const showing = zone.style.display !== 'none';
+  zone.style.display = showing ? 'none' : 'block';
+  if(!showing){
+    const vipOk = myVipActiveUntil && myVipActiveUntil > Date.now() && myVipTierEligibleForFreeNameChange();
+    document.getElementById('profileNameCostHint').textContent = vipOk
+      ? 'com seu VIP, a primeira troca do dia é grátis (depois disso, custa 10 moedas).'
+      : 'custa 10 moedas trocar de nome.';
+  }
+});
+function myVipTierEligibleForFreeNameChange(){
+  return ['1month','5months','1year','2years'].includes(myVipTier||'');
+}
+document.getElementById('profileNameSaveBtn').addEventListener('click', async ()=>{
+  const input = document.getElementById('profileNameInput');
+  const newName = (input.value||'').trim();
+  const msgEl = document.getElementById('profileMsg');
+  if(!newName){ msgEl.textContent = 'digita um nome antes.'; return; }
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'trocando…';
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/change-name', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({uid: myId, newName})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha ao trocar nome');
+    myName = newName;
+    document.getElementById('profileNameText').textContent = newName;
+    document.getElementById('profileModalTitle').textContent = 'Seu perfil';
+    document.getElementById('profileEditNameZone').style.display = 'none';
+    msgEl.style.color = 'var(--ok)';
+    msgEl.textContent = data.cost > 0 ? ('nome trocado! (-' + data.cost + ' moedas)') : 'nome trocado de graça (VIP)!';
+    if(data.cost > 0){
+      document.getElementById('profileCoinsLine').textContent = '🪙 ' + data.balance + ' moedas';
+    }
+    if(presenceRef) presenceRef.update({name: myName}).catch(()=>{});
+  }catch(e){
+    console.error(e);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = e.message || 'erro ao trocar nome (veja o Console/F12).';
+  }
+});
+
+async function renderFriendActionButton(otherUid, otherName){
+  const zone = document.getElementById('profileFriendActionZone');
+  zone.textContent = 'carregando…';
+  try{
+    const [friendSnap, receivedSnap, sentSnap] = await Promise.all([
+      db.ref('friends/'+myId+'/'+otherUid).once('value'),
+      db.ref('friendRequests/'+myId+'/'+otherUid).once('value'),
+      db.ref('friendRequests/'+otherUid+'/'+myId).once('value'),
+    ]);
+    zone.innerHTML = '';
+    if(friendSnap.exists()){
+      const btn = document.createElement('button'); btn.className='btn secondary'; btn.textContent = '✓ vocês são amigos — desfazer';
+      btn.addEventListener('click', async ()=>{
+        await db.ref().update({ ['friends/'+myId+'/'+otherUid]: null, ['friends/'+otherUid+'/'+myId]: null });
+        renderFriendActionButton(otherUid, otherName);
+      });
+      zone.appendChild(btn);
+    } else if(receivedSnap.exists()){
+      const req = receivedSnap.val();
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent = 'aceitar pedido de amizade';
+      btn.addEventListener('click', async ()=>{
+        await db.ref().update({
+          ['friends/'+myId+'/'+otherUid]: {name: req.fromName || otherName, since: Date.now()},
+          ['friends/'+otherUid+'/'+myId]: {name: myName, since: Date.now()},
+          ['friendRequests/'+myId+'/'+otherUid]: null,
+        });
+        renderFriendActionButton(otherUid, otherName);
+      });
+      zone.appendChild(btn);
+    } else if(sentSnap.exists()){
+      const btn = document.createElement('button'); btn.className='mini-btn'; btn.disabled = true; btn.textContent = 'pedido enviado — aguardando';
+      zone.appendChild(btn);
+    } else {
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent = '+ adicionar amigo';
+      btn.addEventListener('click', async ()=>{
+        try{
+          await db.ref('friendRequests/'+otherUid+'/'+myId).set({fromName: myName, at: Date.now()});
+          renderFriendActionButton(otherUid, otherName);
+        }catch(e){ console.error(e); document.getElementById('profileMsg').textContent = 'não consegui enviar o pedido.'; }
+      });
+      zone.appendChild(btn);
+    }
+  }catch(e){
+    console.error(e);
+    zone.innerHTML = '';
+    document.getElementById('profileMsg').textContent = 'erro ao carregar status de amizade.';
+  }
+}
+
+function watchOwnFriendsAndRequests(){
+  if(profileFriendReqRef) profileFriendReqRef.off();
+  if(profileFriendsListRef) profileFriendsListRef.off();
+
+  profileFriendReqRef = db.ref('friendRequests/'+myId);
+  profileFriendReqRef.on('value', snap=>{
+    const val = snap.val() || {};
+    const list = document.getElementById('friendRequestsList');
+    const ids = Object.keys(val);
+    if(!ids.length){ list.innerHTML = '<div class="empty" style="padding:6px 0;">nenhum pedido pendente.</div>'; return; }
+    list.innerHTML = '';
+    ids.forEach(fromUid=>{
+      const req = val[fromUid];
+      const row = document.createElement('div'); row.className='prow';
+      row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+      const info = document.createElement('div'); info.className='info'; info.textContent = req.fromName||'???';
+      row.appendChild(info);
+      const acceptBtn = document.createElement('button'); acceptBtn.className='mini-btn ok'; acceptBtn.textContent='aceitar';
+      acceptBtn.addEventListener('click', ()=>{
+        db.ref().update({
+          ['friends/'+myId+'/'+fromUid]: {name: req.fromName||'???', since: Date.now()},
+          ['friends/'+fromUid+'/'+myId]: {name: myName, since: Date.now()},
+          ['friendRequests/'+myId+'/'+fromUid]: null,
+        });
+      });
+      const rejectBtn = document.createElement('button'); rejectBtn.className='mini-btn warn'; rejectBtn.textContent='recusar';
+      rejectBtn.addEventListener('click', ()=>{ db.ref('friendRequests/'+myId+'/'+fromUid).remove(); });
+      row.appendChild(acceptBtn); row.appendChild(rejectBtn);
+      list.appendChild(row);
+    });
+  });
+
+  profileFriendsListRef = db.ref('friends/'+myId);
+  profileFriendsListRef.on('value', snap=>{
+    const val = snap.val() || {};
+    const list = document.getElementById('friendsListEl');
+    const ids = Object.keys(val);
+    if(!ids.length){ list.innerHTML = '<div class="empty" style="padding:6px 0;">você ainda não tem amigos adicionados.</div>'; return; }
+    list.innerHTML = '';
+    ids.forEach(otherUid=>{
+      const f = val[otherUid];
+      const row = document.createElement('div'); row.className='prow';
+      row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+      const info = document.createElement('div'); info.className='info'; info.textContent = (f && f.name) || '???';
+      row.appendChild(info);
+      const rmBtn = document.createElement('button'); rmBtn.className='mini-btn warn'; rmBtn.textContent='remover';
+      rmBtn.addEventListener('click', ()=>{
+        db.ref().update({ ['friends/'+myId+'/'+otherUid]: null, ['friends/'+otherUid+'/'+myId]: null });
+      });
+      row.appendChild(rmBtn);
+      list.appendChild(row);
+    });
+  });
+}
+
+// ============ Ajuda ============
+const helpModal = document.getElementById('helpModal');
+let helpCurrentTab = 'mentores';
+document.getElementById('openHelpBtnLobby').addEventListener('click', ()=>openHelpModal());
+document.getElementById('helpModalClose').addEventListener('click', ()=>{ helpModal.style.display = 'none'; });
+document.getElementById('helpTabMentores').addEventListener('click', ()=>{ helpCurrentTab = 'mentores'; renderHelpStaffList(); });
+document.getElementById('helpTabMods').addEventListener('click', ()=>{ helpCurrentTab = 'moderadores'; renderHelpStaffList(); });
+
+let helpStaffCache = null;
+async function openHelpModal(){
+  helpModal.style.display = 'flex';
+  document.getElementById('helpStaffList').innerHTML = '<div class="empty" style="padding:8px 0;">carregando…</div>';
+  try{
+    const snap = await db.ref('staffDirectory').once('value');
+    helpStaffCache = snap.val() || {};
+  }catch(e){
+    console.error('erro ao carregar equipe:', e);
+    helpStaffCache = {};
+  }
+  renderHelpStaffList();
+}
+function renderHelpStaffList(){
+  document.getElementById('helpTabMentores').className = helpCurrentTab === 'mentores' ? 'mini-btn ok' : 'mini-btn';
+  document.getElementById('helpTabMods').className = helpCurrentTab === 'moderadores' ? 'mini-btn ok' : 'mini-btn';
+  const wantedRoles = helpCurrentTab === 'mentores' ? ['mentor_senior','mentor'] : ['mod_senior','mod'];
+  const list = document.getElementById('helpStaffList');
+  const entries = Object.values(helpStaffCache || {}).filter(s => wantedRoles.includes(s.role));
+  if(!entries.length){
+    list.innerHTML = '<div class="empty" style="padding:8px 0;">ninguém com esse cargo no momento.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  entries.forEach(s=>{
+    const roleInfo = ROLES[s.role] || ROLES.player;
+    const row = document.createElement('div'); row.className='prow';
+    row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+    const info = document.createElement('div'); info.className='info'; info.textContent = s.name||'???';
+    row.appendChild(info);
+    const badge = document.createElement('span'); badge.className='role-badge';
+    badge.style.background = roleInfo.color+'33'; badge.style.color = roleInfo.color;
+    badge.textContent = roleInfo.label;
+    row.appendChild(badge);
+    list.appendChild(row);
   });
 }
 
@@ -2446,7 +2818,13 @@ async function renderRolesTab(){
       options.forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=ROLES[r].label; if(r===u.role) o.selected=true; sel.appendChild(o); });
       const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='salvar';
       btn.addEventListener('click', async ()=>{
-        try{ await db.ref('users/'+uid+'/role').set(sel.value); btn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+        try{
+          const updates = {};
+          updates['users/'+uid+'/role'] = sel.value;
+          updates['staffDirectory/'+uid] = (sel.value === 'player') ? null : {name: u.name||'???', role: sel.value};
+          await db.ref().update(updates);
+          btn.textContent='✓'; setTimeout(()=>renderRolesTab(),400);
+        }
         catch(e){ console.error(e); btn.textContent='erro'; }
       });
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div>`;
