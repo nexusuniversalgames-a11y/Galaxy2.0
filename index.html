@@ -1556,6 +1556,10 @@ let scene, camera, renderer, glCanvas;
 let myChar, myMoving=false;
 const me = {x:0, z:6, rotY:0, targetRotY:0};
 let WORLD_RADIUS = 34;
+let collisionMeshes = []; // paredes/objetos do mapa customizado que bloqueiam o jogador
+let mapDoors = [];        // objetos "Porta_*" do mapa customizado que abrem sozinhos
+const collisionRaycaster = new THREE.Raycaster();
+const PLAYER_RADIUS = 0.38;
 const remote = {};
 const keys = {};
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
@@ -1743,13 +1747,30 @@ function buildWorld(mapUrl){
   }
 
   usingCustomMap = !!mapUrl;
+  collisionMeshes = [];
+  mapDoors = [];
   if(mapUrl){
     // mapa customizado enviado por um dev: carrega o .glb e pula a geração procedural padrão.
     // OBS: mapas customizados usam chão "chato" (altura 0) — sem o relevo procedural do mapa padrão.
     const loader = new THREE.GLTFLoader();
     loader.load(mapUrl,
       gltf=>{
-        gltf.scene.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+        gltf.scene.traverse(o=>{
+          if(o.isMesh){
+            o.castShadow = true; o.receiveShadow = true;
+            const n = (o.name||'').toLowerCase();
+            const isFloorish = /piso|floor|ch[aã]o|ground|estrada|road|patio|p[aá]tio|quadra|terreno|cal[cç]ada|heliponto|\brua\b/.test(n);
+            if(!isFloorish) collisionMeshes.push(o);
+            if(n.includes('porta')){
+              mapDoors.push({
+                mesh:o,
+                closedRot: o.rotation.y,
+                openRot: o.rotation.y + Math.PI/2,
+                openAmount: 0, // 0 = fechada, 1 = totalmente aberta
+              });
+            }
+          }
+        });
         scene.add(gltf.scene);
       },
       undefined,
@@ -1905,6 +1926,32 @@ document.querySelectorAll('.dpad-btn').forEach(btn=>{
   btn.addEventListener('touchcancel', release);
 });
 
+function wallBlocks(fromX, fromZ, toX, toZ){
+  if(!collisionMeshes.length) return false;
+  const from = new THREE.Vector3(fromX, 1.0, fromZ);
+  const to = new THREE.Vector3(toX, 1.0, toZ);
+  const dist = from.distanceTo(to);
+  if(dist < 1e-5) return false;
+  const dir = to.clone().sub(from).normalize();
+  collisionRaycaster.set(from, dir);
+  collisionRaycaster.near = 0;
+  collisionRaycaster.far = dist + PLAYER_RADIUS;
+  const hits = collisionRaycaster.intersectObjects(collisionMeshes, false);
+  return hits.length > 0 && hits[0].distance < dist + PLAYER_RADIUS*0.5;
+}
+
+function updateMapDoors(dt){
+  if(!mapDoors.length) return;
+  const OPEN_DIST = 3.2;
+  mapDoors.forEach(d=>{
+    const wp = d.mesh.getWorldPosition(new THREE.Vector3());
+    const dist = Math.hypot(wp.x-me.x, wp.z-me.z);
+    const target = dist < OPEN_DIST ? 1 : 0;
+    d.openAmount += (target - d.openAmount) * Math.min(1, dt*4);
+    d.mesh.rotation.y = d.closedRot + (d.openRot-d.closedRot)*d.openAmount;
+  });
+}
+
 function updateMe(dt){
   let dx=0, dz=0;
   if(keys['w']||keys['arrowup']) dz -= 1;
@@ -1917,7 +1964,15 @@ function updateMe(dt){
     me.targetRotY = Math.atan2(dx, dz);
     const speed = 4.2*dt;
     const nx = me.x + dx*speed, nz = me.z + dz*speed;
-    if(Math.hypot(nx,nz) < WORLD_RADIUS){ me.x = nx; me.z = nz; }
+    if(Math.hypot(nx,nz) < WORLD_RADIUS && !wallBlocks(me.x, me.z, nx, nz)){
+      me.x = nx; me.z = nz;
+    } else {
+      // bateu numa parede: tenta deslizar só num eixo por vez, em vez de travar de vez
+      const nx2 = me.x + dx*speed;
+      if(Math.hypot(nx2, me.z) < WORLD_RADIUS && !wallBlocks(me.x, me.z, nx2, me.z)) me.x = nx2;
+      const nz2 = me.z + dz*speed;
+      if(Math.hypot(me.x, nz2) < WORLD_RADIUS && !wallBlocks(me.x, me.z, me.x, nz2)) me.z = nz2;
+    }
   }
   let diff = me.targetRotY - me.rotY;
   while(diff > Math.PI) diff -= Math.PI*2;
@@ -1994,6 +2049,7 @@ function gameLoop(t){
     const dt = Math.min((t-lastTime)/1000, 0.05);
     lastTime = t;
     updateMe(dt);
+    updateMapDoors(dt);
     Object.values(remote).forEach(r=>{
       const cx = r.group.position.x, cz = r.group.position.z;
       const nx = cx + (r.targetX-cx)*Math.min(1,dt*8);
