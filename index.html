@@ -1555,7 +1555,7 @@ let usingCustomMap = false;
 let scene, camera, renderer, glCanvas;
 let myChar, myMoving=false;
 const me = {x:0, z:6, rotY:0, targetRotY:0};
-const WORLD_RADIUS = 34;
+let WORLD_RADIUS = 34;
 const remote = {};
 const keys = {};
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
@@ -1711,8 +1711,14 @@ function buildFountain(){
 
 function buildWorld(mapUrl){
   scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xffe0b3, 22, 72);
-  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+  // mapas customizados podem ser muito maiores que o mapa padrão da Nébula —
+  // libera o raio de andar, a névoa e o alcance da câmera nesse caso
+  WORLD_RADIUS = mapUrl ? 600 : 34;
+  const fogNear = mapUrl ? 40 : 22;
+  const fogFar  = mapUrl ? 320 : 72;
+  const camFar  = mapUrl ? 900 : 200;
+  scene.fog = new THREE.Fog(0xffe0b3, fogNear, fogFar);
+  camera = new THREE.PerspectiveCamera(55, 1, 0.1, camFar);
   glCanvas = document.getElementById('gl');
   renderer = new THREE.WebGLRenderer({canvas:glCanvas, antialias:true});
   renderer.shadowMap.enabled = true;
