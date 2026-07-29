@@ -1651,8 +1651,11 @@ const me = {x:0, z:6, rotY:0, targetRotY:0};
 let WORLD_RADIUS = 34;
 let collisionMeshes = []; // paredes/objetos do mapa customizado que bloqueiam o jogador
 let mapDoors = [];        // objetos "Porta_*" do mapa customizado que abrem sozinhos
+let customMapMeshes = []; // TODOS os meshes do mapa customizado (pra sentir a altura do chão/escada embaixo do personagem)
 const collisionRaycaster = new THREE.Raycaster();
+const groundRaycaster = new THREE.Raycaster();
 const PLAYER_RADIUS = 0.38;
+const STEP_HEIGHT = 0.5; // degrau/obstáculo até essa altura não bloqueia — o personagem sobe sozinho
 const remote = {};
 const keys = {};
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
@@ -1842,15 +1845,16 @@ function buildWorld(mapUrl){
   usingCustomMap = !!mapUrl;
   collisionMeshes = [];
   mapDoors = [];
+  customMapMeshes = [];
   if(mapUrl){
     // mapa customizado enviado por um dev: carrega o .glb e pula a geração procedural padrão.
-    // OBS: mapas customizados usam chão "chato" (altura 0) — sem o relevo procedural do mapa padrão.
     const loader = new THREE.GLTFLoader();
     loader.load(mapUrl,
       gltf=>{
         gltf.scene.traverse(o=>{
           if(o.isMesh){
             o.castShadow = true; o.receiveShadow = true;
+            customMapMeshes.push(o);
             const n = (o.name||'').toLowerCase();
             const isFloorish = /piso|floor|ch[aã]o|ground|estrada|road|patio|p[aá]tio|quadra|terreno|cal[cç]ada|heliponto|\brua\b/.test(n);
             if(!isFloorish) collisionMeshes.push(o);
@@ -1974,7 +1978,14 @@ function buildWorld(mapUrl){
   }
 }
 function groundHeightAt(x,z){
-  if(usingCustomMap) return 0;
+  if(usingCustomMap){
+    if(!customMapMeshes.length) return 0;
+    groundRaycaster.set(new THREE.Vector3(x, 300, z), new THREE.Vector3(0,-1,0));
+    groundRaycaster.near = 0;
+    groundRaycaster.far = 600;
+    const hits = groundRaycaster.intersectObjects(customMapMeshes, false);
+    return hits.length ? hits[0].point.y : 0;
+  }
   const base = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
   const d = Math.hypot(x-POND.x, z-POND.z);
   const basin = -0.85;
@@ -2021,10 +2032,14 @@ document.querySelectorAll('.dpad-btn').forEach(btn=>{
 
 function wallBlocks(fromX, fromZ, toX, toZ){
   if(!collisionMeshes.length) return false;
-  const from = new THREE.Vector3(fromX, 1.0, fromZ);
-  const to = new THREE.Vector3(toX, 1.0, toZ);
-  const dist = from.distanceTo(to);
+  const dist = Math.hypot(toX-fromX, toZ-fromZ);
   if(dist < 1e-5) return false;
+  // a altura do raio acompanha o chão embaixo do jogador + STEP_HEIGHT — assim
+  // um degrau de escada (mais baixo que isso) não bloqueia, só parede de verdade
+  const footY = usingCustomMap ? groundHeightAt(fromX, fromZ) : 0;
+  const rayY = footY + STEP_HEIGHT;
+  const from = new THREE.Vector3(fromX, rayY, fromZ);
+  const to = new THREE.Vector3(toX, rayY, toZ);
   const dir = to.clone().sub(from).normalize();
   collisionRaycaster.set(from, dir);
   collisionRaycaster.near = 0;
