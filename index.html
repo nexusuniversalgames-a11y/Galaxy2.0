@@ -208,6 +208,7 @@
         <div class="head-actions">
           <button id="openProfileBtnLobby">perfil</button>
           <button id="openHelpBtnLobby">ajuda</button>
+          <button id="myJailLogBtn">minhas prisões</button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
           <button id="panelBtnLobby" style="display:none;">painel</button>
@@ -345,6 +346,15 @@
   </button>
 </div>
 
+<div id="myJailLogModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(460px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Minhas prisões</h2><button id="myJailLogModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="hint" style="margin-bottom:12px;">Registro das últimas prisões que você fez, com as mensagens da pessoa presa (fica disponível por 15 dias). Se você acha que errou em alguma, pode pedir pra equipe revisar de novo.</div>
+      <div id="myJailLogList" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+  </div>
+</div>
 <div id="helpModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
   <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
     <div class="panelHead"><h2>Ajuda</h2><button id="helpModalClose">×</button></div>
@@ -2759,6 +2769,77 @@ const helpModal = document.getElementById('helpModal');
 let helpCurrentTab = 'mentores';
 document.getElementById('openHelpBtnLobby').addEventListener('click', ()=>openHelpModal());
 document.getElementById('helpModalClose').addEventListener('click', ()=>{ helpModal.style.display = 'none'; });
+
+const myJailLogModal = document.getElementById('myJailLogModal');
+document.getElementById('myJailLogBtn').addEventListener('click', ()=>openMyJailLogModal());
+document.getElementById('myJailLogModalClose').addEventListener('click', ()=>{ myJailLogModal.style.display = 'none'; });
+
+async function openMyJailLogModal(){
+  myJailLogModal.style.display = 'flex';
+  const listEl = document.getElementById('myJailLogList');
+  listEl.innerHTML = '<div class="empty">carregando…</div>';
+  try{
+    const snap = await db.ref('jailActionsByJailer/'+myId).once('value');
+    const val = snap.val() || {};
+    const now = Date.now();
+    const FIFTEEN_DAYS = 15*24*3600000;
+    const entries = Object.keys(val)
+      .map(id=>({id, ...val[id]}))
+      .filter(e=> e.at && (now - e.at) <= FIFTEEN_DAYS)
+      .sort((a,b)=> b.at - a.at);
+    listEl.innerHTML = '';
+    if(!entries.length){
+      listEl.innerHTML = '<div class="empty">nenhuma prisão sua nos últimos 15 dias.</div>';
+      return;
+    }
+    entries.forEach(e=>{
+      const card = document.createElement('div');
+      card.style.cssText = 'background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:10px; padding:10px 12px;';
+      const statusLabel = e.reviewStatus === 'fair' ? '<span style="color:var(--ok);">avaliada como justa</span>'
+        : e.reviewStatus === 'unfair' ? '<span style="color:var(--danger);">avaliada como injusta</span>'
+        : '<span class="hint">aguardando revisão</span>';
+      const daysLeft = Math.max(0, Math.ceil((FIFTEEN_DAYS - (now - e.at))/86400000));
+      const head = document.createElement('div');
+      head.innerHTML = `<b>${escapeHtml(e.targetName||'???')}</b> — ${new Date(e.at).toLocaleDateString('pt-BR')} — ${statusLabel}
+        <div class="hint" style="font-size:11px;">some do registro em ${daysLeft} dia(s)</div>`;
+      card.appendChild(head);
+
+      const msgs = e.recentMessages || [];
+      const msgBox = document.createElement('div');
+      msgBox.style.cssText = 'background:rgba(0,0,0,.25); border-radius:6px; padding:6px 8px; font-size:12px; max-height:120px; overflow:auto; margin-top:8px;';
+      msgBox.innerHTML = msgs.length ? msgs.map(m=>`<div>${escapeHtml(m.text||'')}</div>`).join('') : '<span class="hint">sem mensagens recentes dela(e) nos 10 min antes da prisão.</span>';
+      card.appendChild(msgBox);
+
+      if(e.reviewStatus !== 'pending'){
+        const askBtn = document.createElement('button');
+        askBtn.className = 'mini-btn'; askBtn.style.marginTop = '8px'; askBtn.textContent = 'pedir revisão de novo';
+        askBtn.addEventListener('click', async ()=>{
+          if(!confirm('Pedir pra equipe revisar essa prisão de novo?')) return;
+          askBtn.textContent = 'enviando…';
+          try{
+            const resp = await fetch(EDGE_FUNCTIONS_BASE+'/request-jail-review', {
+              method:'POST', headers: edgeFunctionHeaders(),
+              body: JSON.stringify({jailerUid: myId, targetUid: e.targetUid, historyEntryId: e.id})
+            });
+            const data = await resp.json();
+            if(!resp.ok) throw new Error(data.error || 'falha ao pedir revisão');
+            askBtn.textContent = '✓ pedido enviado';
+            askBtn.disabled = true;
+          }catch(err){
+            console.error(err);
+            askBtn.textContent = 'pedir revisão de novo';
+            alert(err.message || 'erro ao pedir revisão');
+          }
+        });
+        card.appendChild(askBtn);
+      }
+      listEl.appendChild(card);
+    });
+  }catch(err){
+    console.error(err);
+    listEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
+}
 document.getElementById('helpTabMentores').addEventListener('click', ()=>{ helpCurrentTab = 'mentores'; renderHelpStaffList(); });
 document.getElementById('helpTabMods').addEventListener('click', ()=>{ helpCurrentTab = 'moderadores'; renderHelpStaffList(); });
 
