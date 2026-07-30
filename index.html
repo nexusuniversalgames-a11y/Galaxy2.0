@@ -209,6 +209,7 @@
           <button id="openProfileBtnLobby">perfil</button>
           <button id="openHelpBtnLobby">ajuda</button>
           <button id="myJailLogBtn">minhas prisões</button>
+          <button id="dmInboxBtn" style="position:relative;">mensagens <span id="dmUnreadDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
           <button id="panelBtnLobby" style="display:none;">painel</button>
@@ -346,6 +347,26 @@
   </button>
 </div>
 
+<div id="dmInboxModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Mensagens</h2><button id="dmInboxModalClose">×</button></div>
+    <div style="padding:14px 16px 18px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div id="dmInboxList" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="dmThreadModal" style="display:none; position:fixed; inset:0; z-index:51; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); height:min(600px,80vh); background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2 id="dmThreadTitle">Conversa</h2><button id="dmThreadModalClose">×</button></div>
+    <div id="dmThreadMessages" style="flex:1; padding:12px 14px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;"></div>
+    <div style="display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--line);">
+      <input type="text" id="dmThreadInput" maxlength="500" placeholder="escreva uma mensagem…" style="flex:1;">
+      <button class="btn" id="dmThreadSendBtn">enviar</button>
+    </div>
+  </div>
+</div>
+
 <div id="myJailLogModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
   <div style="width:min(460px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
     <div class="panelHead"><h2>Minhas prisões</h2><button id="myJailLogModalClose">×</button></div>
@@ -361,8 +382,9 @@
     <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
       <div class="hint" style="margin-bottom:12px;">Precisando de ajuda dentro do jogo? Essas pessoas fazem parte da equipe e podem te dar uma força.</div>
       <div style="display:flex; gap:8px; margin-bottom:12px;">
-        <button class="mini-btn" id="helpTabMentores">Mentores</button>
+        <button class="mini-btn" id="helpTabDevs">Devs &amp; GM</button>
         <button class="mini-btn" id="helpTabMods">Moderadores</button>
+        <button class="mini-btn" id="helpTabMentores">Mentores</button>
       </div>
       <div id="helpStaffList" style="display:flex; flex-direction:column; gap:6px; max-height:320px; overflow:auto;">
         <div class="empty" style="padding:8px 0;">carregando…</div>
@@ -1495,6 +1517,7 @@ auth.onAuthStateChanged(async (user)=>{
     myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
     fetchVipStatus(myId).then(v=>{ myVipActiveUntil = v.active_until||null; myVipTier = v.tier||null; });
     startJailStatusWatcher();
+    startDmInboxWatcher();
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
@@ -2553,7 +2576,19 @@ async function openProfileModal(uid){
     if(profileFriendsListRef){ profileFriendsListRef.off(); profileFriendsListRef = null; }
     renderFriendActionButton(uid, name, role);
     renderStaffJailControls(uid, name);
+    renderDmButton(uid, name);
   }
+}
+
+function renderDmButton(uid, name){
+  const zone = document.getElementById('profileFriendActionZone');
+  const btn = document.createElement('button');
+  btn.className = 'mini-btn'; btn.style.marginTop = '8px'; btn.textContent = '💬 mandar mensagem';
+  btn.addEventListener('click', ()=>{
+    profileModal.style.display = 'none';
+    openDmThread(uid, name);
+  });
+  zone.appendChild(btn);
 }
 
 function renderStaffJailControls(uid, name){
@@ -2840,6 +2875,7 @@ async function openMyJailLogModal(){
     listEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
   }
 }
+document.getElementById('helpTabDevs').addEventListener('click', ()=>{ helpCurrentTab = 'devs'; renderHelpStaffList(); });
 document.getElementById('helpTabMentores').addEventListener('click', ()=>{ helpCurrentTab = 'mentores'; renderHelpStaffList(); });
 document.getElementById('helpTabMods').addEventListener('click', ()=>{ helpCurrentTab = 'moderadores'; renderHelpStaffList(); });
 
@@ -2857,19 +2893,23 @@ async function openHelpModal(){
   renderHelpStaffList();
 }
 function renderHelpStaffList(){
+  document.getElementById('helpTabDevs').className = helpCurrentTab === 'devs' ? 'mini-btn ok' : 'mini-btn';
   document.getElementById('helpTabMentores').className = helpCurrentTab === 'mentores' ? 'mini-btn ok' : 'mini-btn';
   document.getElementById('helpTabMods').className = helpCurrentTab === 'moderadores' ? 'mini-btn ok' : 'mini-btn';
-  const wantedRoles = helpCurrentTab === 'mentores' ? ['mentor_senior','mentor'] : ['mod_senior','mod'];
+  const wantedRoles = helpCurrentTab === 'devs' ? ['dev_senior','dev','gm']
+    : helpCurrentTab === 'mentores' ? ['mentor_senior','mentor'] : ['mod_senior','mod'];
   const list = document.getElementById('helpStaffList');
-  const entries = Object.values(helpStaffCache || {}).filter(s => wantedRoles.includes(s.role));
+  const entries = Object.entries(helpStaffCache || {})
+    .filter(([uid, s]) => wantedRoles.includes(s.role))
+    .sort((a,b)=> rankOf(b[1].role) - rankOf(a[1].role));
   if(!entries.length){
     list.innerHTML = '<div class="empty" style="padding:8px 0;">ninguém com esse cargo no momento.</div>';
     return;
   }
   list.innerHTML = '';
-  entries.forEach(s=>{
+  entries.forEach(([uid, s])=>{
     const roleInfo = ROLES[s.role] || ROLES.player;
-    const row = document.createElement('div'); row.className='prow';
+    const row = document.createElement('div'); row.className='prow'; row.style.cursor = 'pointer';
     row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
     const info = document.createElement('div'); info.className='info'; info.textContent = s.name||'???';
     row.appendChild(info);
@@ -2877,11 +2917,148 @@ function renderHelpStaffList(){
     badge.style.background = roleInfo.color+'33'; badge.style.color = roleInfo.color;
     badge.textContent = roleInfo.label;
     row.appendChild(badge);
+    row.addEventListener('click', ()=>{
+      helpModal.style.display = 'none';
+      openProfileModal(uid);
+    });
     list.appendChild(row);
   });
 }
 
-// ============ Prisão ============
+// ============ Mensagens privadas ============
+let dmThreadsCache = {};
+let dmThreadsRef = null;
+let dmCurrentThreadRef = null;
+let dmCurrentOtherUid = null;
+
+function dmConvoId(a, b){ return [a, b].sort().join('_'); }
+
+function startDmInboxWatcher(){
+  if(dmThreadsRef) dmThreadsRef.off();
+  dmThreadsRef = db.ref('privateThreads/'+myId);
+  dmThreadsRef.on('value', snap=>{
+    dmThreadsCache = snap.val() || {};
+    const hasUnread = Object.values(dmThreadsCache).some(t=>t.unread);
+    document.getElementById('dmUnreadDot').style.display = hasUnread ? 'block' : 'none';
+    if(dmInboxModal.style.display === 'flex') renderDmInboxList();
+  });
+}
+
+const dmInboxModal = document.getElementById('dmInboxModal');
+const dmThreadModal = document.getElementById('dmThreadModal');
+document.getElementById('dmInboxBtn').addEventListener('click', ()=>{
+  dmInboxModal.style.display = 'flex';
+  renderDmInboxList();
+});
+document.getElementById('dmInboxModalClose').addEventListener('click', ()=>{ dmInboxModal.style.display = 'none'; });
+document.getElementById('dmThreadModalClose').addEventListener('click', ()=>{
+  dmThreadModal.style.display = 'none';
+  if(dmCurrentThreadRef){ dmCurrentThreadRef.off(); dmCurrentThreadRef = null; }
+});
+
+function renderDmInboxList(){
+  const list = document.getElementById('dmInboxList');
+  const entries = Object.entries(dmThreadsCache).sort((a,b)=> (b[1].lastTs||0) - (a[1].lastTs||0));
+  if(!entries.length){
+    list.innerHTML = '<div class="empty">nenhuma conversa ainda. mande mensagem pra alguém pelo perfil dela(e), ou pra um membro da equipe na aba de Ajuda.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  entries.forEach(([otherUid, t])=>{
+    const row = document.createElement('div'); row.className='prow'; row.style.cursor = 'pointer';
+    row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+    const info = document.createElement('div');
+    info.innerHTML = `<b>${escapeHtml(t.otherName||'???')}</b><div class="hint" style="font-size:12px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(t.lastMsg||'')}</div>`;
+    row.appendChild(info);
+    if(t.unread){
+      const dot = document.createElement('span'); dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:var(--danger); flex-shrink:0;';
+      row.appendChild(dot);
+    }
+    row.addEventListener('click', ()=>{ dmInboxModal.style.display = 'none'; openDmThread(otherUid, t.otherName); });
+    list.appendChild(row);
+  });
+}
+
+function openDmThread(otherUid, otherName){
+  dmCurrentOtherUid = otherUid;
+  document.getElementById('dmThreadTitle').textContent = 'Conversa com ' + (otherName||'???');
+  dmThreadModal.style.display = 'flex';
+  const msgsEl = document.getElementById('dmThreadMessages');
+  msgsEl.innerHTML = '<div class="empty">carregando…</div>';
+
+  db.ref('privateThreads/'+myId+'/'+otherUid+'/unread').set(false).catch(()=>{});
+
+  const convoId = dmConvoId(myId, otherUid);
+  if(dmCurrentThreadRef) dmCurrentThreadRef.off();
+  dmCurrentThreadRef = db.ref('privateMessages/'+convoId).limitToLast(200);
+  dmCurrentThreadRef.on('value', snap=>{
+    const val = snap.val() || {};
+    const msgs = Object.values(val).sort((a,b)=> a.ts - b.ts);
+    msgsEl.innerHTML = '';
+    if(!msgs.length){
+      msgsEl.innerHTML = '<div class="empty">nenhuma mensagem ainda — diz oi!</div>';
+    } else {
+      msgs.forEach(m=>{
+        const mine = m.from === myId;
+        const wrap = document.createElement('div');
+        wrap.style.cssText = `display:flex; align-items:flex-end; gap:6px; align-self:${mine?'flex-end':'flex-start'}; max-width:85%;`;
+        const bubble = document.createElement('div');
+        bubble.style.cssText = `padding:8px 12px; border-radius:12px; font-size:13px; background:${mine?'var(--nebula-soft)':'rgba(255,255,255,.06)'}; color:${mine?'#0c0c14':'var(--text)'};`;
+        bubble.textContent = m.text;
+        wrap.appendChild(bubble);
+        if(!mine){
+          const flagBtn = document.createElement('button');
+          flagBtn.title = 'denunciar esta mensagem'; flagBtn.textContent = '🚩';
+          flagBtn.style.cssText = 'background:none; border:none; cursor:pointer; opacity:.5; font-size:13px; flex-shrink:0;';
+          flagBtn.addEventListener('click', ()=> reportPrivateMessage(otherUid, m.fromName||dmThreadsCache[otherUid]?.otherName, m.text, m.ts));
+          wrap.appendChild(flagBtn);
+        }
+        msgsEl.appendChild(wrap);
+      });
+    }
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  });
+}
+
+async function sendDmMessage(){
+  const input = document.getElementById('dmThreadInput');
+  const text = input.value.trim().slice(0,500);
+  if(!text || !dmCurrentOtherUid) return;
+  input.value = '';
+  const otherUid = dmCurrentOtherUid;
+  try{
+    const convoId = dmConvoId(myId, otherUid);
+    const msg = {from: myId, fromName: myName, to: otherUid, text, ts: Date.now()};
+    await db.ref('privateMessages/'+convoId).push(msg);
+    const otherProfileSnap = await db.ref('users/'+otherUid+'/name').once('value');
+    const otherName = otherProfileSnap.val() || (dmThreadsCache[otherUid]||{}).otherName || '???';
+    await db.ref().update({
+      ['privateThreads/'+myId+'/'+otherUid]: {otherName, lastMsg: text, lastTs: Date.now(), unread: false},
+      ['privateThreads/'+otherUid+'/'+myId]: {otherName: myName, lastMsg: text, lastTs: Date.now(), unread: true},
+    });
+  }catch(e){
+    console.error('erro ao mandar mensagem privada:', e);
+    alert('não consegui enviar a mensagem (veja o Console/F12).');
+  }
+}
+async function reportPrivateMessage(otherUid, otherName, messageText, messageTs){
+  const reason = prompt('Motivo da denúncia dessa mensagem de ' + (otherName||'???') + ':');
+  if(!reason || !reason.trim()) return;
+  try{
+    await db.ref('reports').push({
+      type: 'dm',
+      reporterUid: myId, reporterName: myName,
+      reportedUid: otherUid, reportedName: otherName||'???',
+      reason: reason.trim().slice(0,300),
+      messageText: (messageText||'').slice(0,500),
+      messageTs: messageTs||null,
+      ts: Date.now(), status:'pending'
+    });
+    alert('denúncia enviada para a moderação.');
+  }catch(e){ console.error(e); alert('não consegui enviar a denúncia agora.'); }
+}
+document.getElementById('dmThreadSendBtn').addEventListener('click', sendDmMessage);
+document.getElementById('dmThreadInput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendDmMessage(); });
 let myJailedUntil = null, myJailedIn = null;
 let jailStatusRef = null;
 let jailCountdownInterval = null;
@@ -3293,8 +3470,11 @@ async function renderReportsTab(){
   items.forEach(r=>{
     const row = document.createElement('div'); row.className='prow';
     const when = new Date(r.ts).toLocaleString('pt-BR');
+    const contextLine = r.type === 'dm' ? 'mensagem privada' : ('sala: ' + escapeHtml(r.roomName||'?'));
     row.innerHTML = `<div class="info"><b>${escapeHtml(r.reportedName)}</b> denunciado por ${escapeHtml(r.reporterName)}
-      <div class="sub">${escapeHtml(r.reason)} — sala: ${escapeHtml(r.roomName||'?')} — ${when} — status: ${r.status}</div></div>`;
+      <div class="sub">${escapeHtml(r.reason)} — ${contextLine} — ${when} — status: ${r.status}</div>
+      ${r.type === 'dm' ? `<div class="hint" style="margin-top:4px; background:rgba(0,0,0,.25); padding:6px 8px; border-radius:6px;">"${escapeHtml(r.messageText||'')}"</div>` : ''}
+      </div>`;
     if(r.status === 'pending'){
       const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='marcar resolvida';
       btn.addEventListener('click', async ()=>{
