@@ -232,6 +232,8 @@
       <div class="rname">você está em <b id="currentRoomName"></b></div>
       <div id="topbar-right">
         <button id="switchMapBtn" style="display:none;">trocar mapa</button>
+        <button id="markPrisonRoomBtn" style="display:none;">marcar como sala de prisão</button>
+        <button id="markNewbieRoomBtn" style="display:none;">marcar como sala de novato</button>
         <button id="panelBtn" style="display:none;">painel</button>
         <button id="leaveBtn">← sair da sala</button>
       </div>
@@ -324,6 +326,18 @@
       <button class="btn" id="saveSwitchMapBtn">Salvar e trocar</button>
       <div class="errmsg" id="switchMapMsg"></div>
     </div>
+  </div>
+</div>
+
+<div id="jailOverlay" style="display:none; position:fixed; inset:0; z-index:80; background:rgba(5,7,20,.92); align-items:center; justify-content:center;">
+  <div style="width:min(380px,92vw); background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--danger); border-radius:14px; padding:24px 22px; text-align:center;">
+    <div style="font-size:34px;">🔒</div>
+    <h2 style="margin:10px 0 4px;">Você está preso</h2>
+    <div class="hint" id="jailInfoLine">—</div>
+    <div class="hint" id="jailCountdownLine" style="margin-top:6px; font-weight:bold; color:var(--danger);">—</div>
+    <div class="hint" style="margin-top:12px;">Sua prisão pode ser revisada pela equipe a qualquer momento. Enquanto isso, você não pode trocar de sala.</div>
+    <button class="btn secondary" id="jailEscapeBtn" style="margin-top:16px;">Fugir por 50 moedas</button>
+    <div class="errmsg" id="jailMsg"></div>
   </div>
 </div>
 
@@ -1397,6 +1411,7 @@ document.getElementById('registerBtn').addEventListener('click', async ()=>{
       document.getElementById('auth-screen').style.display='none';
       document.getElementById('lobby-screen').style.display='flex';
       enterLobbyUI();
+      autoJoinNewbieRoomIfNew();
     }catch(e){
       console.error(e);
       authError.textContent = 'Não consegui salvar seu perfil. Tenta de novo.';
@@ -1465,10 +1480,12 @@ auth.onAuthStateChanged(async (user)=>{
     myId = user.uid;
     myName = profile.name; myAvatarIndex = profile.avatarIndex||0; myRole = profile.role||'player'; myLevel = profile.level||0; myIsNew = !!profile.isNew; myVrmId = profile.vrmId||null;
     fetchVipStatus(myId).then(v=>{ myVipActiveUntil = v.active_until||null; myVipTier = v.tier||null; });
+    startJailStatusWatcher();
     previewActive = false;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('lobby-screen').style.display='flex';
     enterLobbyUI();
+    autoJoinNewbieRoomIfNew();
   } else {
     myId=null; myName=''; myRole='player';
     document.getElementById('lobby-screen').style.display='none';
@@ -1478,6 +1495,24 @@ auth.onAuthStateChanged(async (user)=>{
   }
 });
 
+async function autoJoinNewbieRoomIfNew(){
+  if(!myIsNew) return false;
+  try{
+    const snap = await db.ref('config/newbieRooms').once('value');
+    const val = snap.val() || {};
+    const ids = Object.keys(val);
+    if(!ids.length) return false;
+    const roomId = ids[Math.floor(Math.random()*ids.length)];
+    const metaSnap = await db.ref('rooms/'+roomId+'/meta').once('value');
+    const meta = metaSnap.val();
+    if(!meta) return false;
+    await enterRoom(roomId, meta.name || 'Sala de novato');
+    return true;
+  }catch(e){
+    console.error('erro ao entrar automaticamente numa sala de novato:', e);
+    return false;
+  }
+}
 function enterLobbyUI(){
   document.getElementById('who-name').textContent = myName;
   document.getElementById('whoAvatar').style.background = '#'+AVATARS[myAvatarIndex].outfit.toString(16).padStart(6,'0');
@@ -1494,6 +1529,8 @@ function enterLobbyUI(){
   document.getElementById('panelBtnLobby').style.display = isStaff(myRole) ? 'inline-block' : 'none';
   document.getElementById('panelBtn').style.display = isStaff(myRole) ? 'inline-block' : 'none';
   document.getElementById('switchMapBtn').style.display = canCreateRoom(myRole) ? 'inline-block' : 'none';
+  document.getElementById('markPrisonRoomBtn').style.display = canManageMaps(myRole) ? 'inline-block' : 'none';
+  document.getElementById('markNewbieRoomBtn').style.display = canManageMaps(myRole) ? 'inline-block' : 'none';
 
   const zone = document.getElementById('createRoomZone');
   if(canCreateRoom(myRole)){
@@ -1628,6 +1665,28 @@ function openMapSwitchModal(){
   renderSwitchMapPicker();
 }
 document.getElementById('switchMapBtn').addEventListener('click', openMapSwitchModal);
+document.getElementById('markPrisonRoomBtn').addEventListener('click', async ()=>{
+  if(!currentRoom) return;
+  if(!confirm('Marcar "' + document.getElementById('currentRoomName').textContent + '" como sala de prisão? Jogadores presos serão mandados pra cá.')) return;
+  try{
+    await db.ref('config/prisonRooms/'+currentRoom).set(true);
+    alert('Sala marcada como sala de prisão!');
+  }catch(e){
+    console.error(e);
+    alert('erro ao marcar (veja o Console/F12).');
+  }
+});
+document.getElementById('markNewbieRoomBtn').addEventListener('click', async ()=>{
+  if(!currentRoom) return;
+  if(!confirm('Marcar "' + document.getElementById('currentRoomName').textContent + '" como sala de novato? Só novos usuários, dev, gm, moderador sênior, mentor sênior e mentor vão poder entrar.')) return;
+  try{
+    await db.ref('config/newbieRooms/'+currentRoom).set(true);
+    alert('Sala marcada como sala de novato!');
+  }catch(e){
+    console.error(e);
+    alert('erro ao marcar (veja o Console/F12).');
+  }
+});
 document.getElementById('mapSwitchModalClose').addEventListener('click', ()=>{ mapSwitchModal.style.display='none'; });
 document.getElementById('saveSwitchMapBtn').addEventListener('click', async ()=>{
   if(!currentRoom) return;
@@ -1651,11 +1710,8 @@ const me = {x:0, z:6, rotY:0, targetRotY:0};
 let WORLD_RADIUS = 34;
 let collisionMeshes = []; // paredes/objetos do mapa customizado que bloqueiam o jogador
 let mapDoors = [];        // objetos "Porta_*" do mapa customizado que abrem sozinhos
-let customMapMeshes = []; // TODOS os meshes do mapa customizado (pra sentir a altura do chão/escada embaixo do personagem)
 const collisionRaycaster = new THREE.Raycaster();
-const groundRaycaster = new THREE.Raycaster();
 const PLAYER_RADIUS = 0.38;
-const STEP_HEIGHT = 0.5; // degrau/obstáculo até essa altura não bloqueia — o personagem sobe sozinho
 const remote = {};
 const keys = {};
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
@@ -1845,16 +1901,15 @@ function buildWorld(mapUrl){
   usingCustomMap = !!mapUrl;
   collisionMeshes = [];
   mapDoors = [];
-  customMapMeshes = [];
   if(mapUrl){
     // mapa customizado enviado por um dev: carrega o .glb e pula a geração procedural padrão.
+    // OBS: mapas customizados usam chão "chato" (altura 0) — sem o relevo procedural do mapa padrão.
     const loader = new THREE.GLTFLoader();
     loader.load(mapUrl,
       gltf=>{
         gltf.scene.traverse(o=>{
           if(o.isMesh){
             o.castShadow = true; o.receiveShadow = true;
-            customMapMeshes.push(o);
             const n = (o.name||'').toLowerCase();
             const isFloorish = /piso|floor|ch[aã]o|ground|estrada|road|patio|p[aá]tio|quadra|terreno|cal[cç]ada|heliponto|\brua\b/.test(n);
             if(!isFloorish) collisionMeshes.push(o);
@@ -1978,14 +2033,7 @@ function buildWorld(mapUrl){
   }
 }
 function groundHeightAt(x,z){
-  if(usingCustomMap){
-    if(!customMapMeshes.length) return 0;
-    groundRaycaster.set(new THREE.Vector3(x, 300, z), new THREE.Vector3(0,-1,0));
-    groundRaycaster.near = 0;
-    groundRaycaster.far = 600;
-    const hits = groundRaycaster.intersectObjects(customMapMeshes, false);
-    return hits.length ? hits[0].point.y : 0;
-  }
+  if(usingCustomMap) return 0;
   const base = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
   const d = Math.hypot(x-POND.x, z-POND.z);
   const basin = -0.85;
@@ -2032,14 +2080,10 @@ document.querySelectorAll('.dpad-btn').forEach(btn=>{
 
 function wallBlocks(fromX, fromZ, toX, toZ){
   if(!collisionMeshes.length) return false;
-  const dist = Math.hypot(toX-fromX, toZ-fromZ);
+  const from = new THREE.Vector3(fromX, 1.0, fromZ);
+  const to = new THREE.Vector3(toX, 1.0, toZ);
+  const dist = from.distanceTo(to);
   if(dist < 1e-5) return false;
-  // a altura do raio acompanha o chão embaixo do jogador + STEP_HEIGHT — assim
-  // um degrau de escada (mais baixo que isso) não bloqueia, só parede de verdade
-  const footY = usingCustomMap ? groundHeightAt(fromX, fromZ) : 0;
-  const rayY = footY + STEP_HEIGHT;
-  const from = new THREE.Vector3(fromX, rayY, fromZ);
-  const to = new THREE.Vector3(toX, rayY, toZ);
   const dir = to.clone().sub(from).normalize();
   collisionRaycaster.set(from, dir);
   collisionRaycaster.near = 0;
@@ -2492,7 +2536,7 @@ async function openProfileModal(uid){
     coinsLine.textContent = '';
     if(profileFriendReqRef){ profileFriendReqRef.off(); profileFriendReqRef = null; }
     if(profileFriendsListRef){ profileFriendsListRef.off(); profileFriendsListRef = null; }
-    renderFriendActionButton(uid, name);
+    renderFriendActionButton(uid, name, role);
   }
 }
 
@@ -2540,7 +2584,7 @@ document.getElementById('profileNameSaveBtn').addEventListener('click', async ()
   }
 });
 
-async function renderFriendActionButton(otherUid, otherName){
+async function renderFriendActionButton(otherUid, otherName, otherRole){
   const zone = document.getElementById('profileFriendActionZone');
   zone.textContent = 'carregando…';
   try{
@@ -2581,6 +2625,13 @@ async function renderFriendActionButton(otherUid, otherName){
         }catch(e){ console.error(e); document.getElementById('profileMsg').textContent = 'não consegui enviar o pedido.'; }
       });
       zone.appendChild(btn);
+    }
+
+    if(myLevel >= 1 && (!otherRole || otherRole === 'player')){
+      const jailBtn = document.createElement('button');
+      jailBtn.className = 'mini-btn warn'; jailBtn.style.marginTop = '8px'; jailBtn.textContent = '🔒 prender';
+      jailBtn.addEventListener('click', ()=>jailPlayer(otherUid, otherName));
+      zone.appendChild(jailBtn);
     }
   }catch(e){
     console.error(e);
@@ -2690,6 +2741,98 @@ function renderHelpStaffList(){
   });
 }
 
+// ============ Prisão ============
+let myJailedUntil = null, myJailedIn = null;
+let jailStatusRef = null;
+let jailCountdownInterval = null;
+
+function startJailStatusWatcher(){
+  if(jailStatusRef) jailStatusRef.off();
+  jailStatusRef = db.ref('users/'+myId);
+  jailStatusRef.on('value', snap=>{
+    const v = snap.val() || {};
+    myJailedUntil = v.jailedUntil || null;
+    myJailedIn = v.jailedIn || null;
+    updateJailOverlay();
+  });
+}
+
+function formatDuration(ms){
+  const totalMin = Math.ceil(ms/60000);
+  if(totalMin < 60) return totalMin + ' min';
+  const totalH = Math.floor(totalMin/60);
+  if(totalH < 24) return totalH + 'h ' + (totalMin%60) + 'min';
+  const totalD = Math.floor(totalH/24);
+  if(totalD < 30) return totalD + ' dia(s)';
+  const totalMo = Math.floor(totalD/30);
+  return totalMo + ' mês(es)';
+}
+
+function updateJailOverlay(){
+  const overlay = document.getElementById('jailOverlay');
+  const now = Date.now();
+  if(myJailedUntil && myJailedUntil > now){
+    overlay.style.display = 'flex';
+    document.getElementById('jailInfoLine').textContent = 'Você foi preso. Fica trancado até o tempo acabar, sua prisão ser revisada, ou você pagar pra fugir.';
+    if(jailCountdownInterval) clearInterval(jailCountdownInterval);
+    const updateCountdown = ()=>{
+      const remaining = myJailedUntil - Date.now();
+      if(remaining <= 0){
+        document.getElementById('jailCountdownLine').textContent = 'liberado!';
+        clearInterval(jailCountdownInterval);
+        return;
+      }
+      document.getElementById('jailCountdownLine').textContent = 'tempo restante: ' + formatDuration(remaining);
+    };
+    updateCountdown();
+    jailCountdownInterval = setInterval(updateCountdown, 1000);
+    if(currentRoom && currentRoom !== myJailedIn){
+      leaveRoom();
+    }
+  } else {
+    overlay.style.display = 'none';
+    if(jailCountdownInterval){ clearInterval(jailCountdownInterval); jailCountdownInterval = null; }
+  }
+}
+
+document.getElementById('jailEscapeBtn').addEventListener('click', async ()=>{
+  const msgEl = document.getElementById('jailMsg');
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'fugindo…';
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/escape-jail', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({uid: myId})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha ao fugir');
+    msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'você fugiu!';
+  }catch(e){
+    console.error(e);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = e.message || 'erro ao tentar fugir.';
+  }
+});
+
+async function jailPlayer(targetUid, targetName){
+  if(!confirm('Prender ' + targetName + '? O tempo de prisão depende do seu nível.')) return;
+  const msgEl = document.getElementById('profileMsg');
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'prendendo…';
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/jail-player', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({jailerUid: myId, targetUid})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha ao prender');
+    msgEl.style.color = 'var(--ok)'; msgEl.textContent = targetName + ' foi preso(a)!';
+    renderFriendActionButton(targetUid, targetName);
+  }catch(e){
+    console.error(e);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = e.message || 'erro ao prender.';
+  }
+}
+
 const panelModal = document.getElementById('panelModal');
 const panelTabsEl = document.getElementById('panelTabs');
 const panelBodyEl = document.getElementById('panelBody');
@@ -2700,6 +2843,7 @@ function openPanel(){
   const tabs = [];
   if(canSeeRolesTab(myRole)) tabs.push({id:'roles', label:'Cargos'});
   if(canSeeReportsTab(myRole)) tabs.push({id:'reports', label:'Denúncias'});
+  if(canSeeReportsTab(myRole)) tabs.push({id:'jails', label:'Prisões'});
   if(canSeeNewUsersTab(myRole)) tabs.push({id:'newusers', label:'Novos usuários'});
   if(canManageMaps(myRole)) tabs.push({id:'maps', label:'Mapas'});
   panelTabsEl.innerHTML='';
@@ -2724,8 +2868,56 @@ async function renderPanelTab(){
   panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
   if(panelCurrentTab === 'roles') return renderRolesTab();
   if(panelCurrentTab === 'reports') return renderReportsTab();
+  if(panelCurrentTab === 'jails') return renderJailsTab();
   if(panelCurrentTab === 'newusers') return renderNewUsersTab();
   if(panelCurrentTab === 'maps') return renderMapsTab();
+}
+async function renderJailsTab(){
+  panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
+  try{
+    const snap = await db.ref('pendingJailReviews').once('value');
+    const val = snap.val() || {};
+    const ids = Object.keys(val);
+    panelBodyEl.innerHTML = '';
+    if(!ids.length){
+      const empty = document.createElement('div'); empty.className='empty'; empty.textContent = 'nenhuma prisão esperando revisão.';
+      panelBodyEl.appendChild(empty);
+      return;
+    }
+    ids.forEach(targetUid=>{
+      const p = val[targetUid];
+      const row = document.createElement('div'); row.className='prow';
+      row.style.display='flex'; row.style.flexDirection='column'; row.style.gap='6px'; row.style.padding='10px 0'; row.style.borderBottom='1px solid var(--line)';
+      const info = document.createElement('div');
+      info.innerHTML = `<b>${escapeHtml(p.targetName||'???')}</b> — preso por <b>${escapeHtml(p.jailedByName||'???')}</b>`;
+      row.appendChild(info);
+      const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.gap='8px';
+      const fairBtn = document.createElement('button'); fairBtn.className='mini-btn ok'; fairBtn.textContent='justa';
+      fairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'fair'));
+      const unfairBtn = document.createElement('button'); unfairBtn.className='mini-btn warn'; unfairBtn.textContent='injusta';
+      unfairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'unfair'));
+      btnRow.appendChild(fairBtn); btnRow.appendChild(unfairBtn);
+      row.appendChild(btnRow);
+      panelBodyEl.appendChild(row);
+    });
+  }catch(e){
+    console.error(e);
+    panelBodyEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
+}
+async function reviewJail(targetUid, verdict){
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/review-jail', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({reviewerUid: myId, targetUid, verdict})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha ao revisar');
+    renderJailsTab();
+  }catch(e){
+    console.error(e);
+    alert(e.message || 'erro ao revisar prisão');
+  }
 }
 function renderMapsTab(){
   panelBodyEl.innerHTML = '';
