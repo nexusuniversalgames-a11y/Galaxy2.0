@@ -2569,6 +2569,29 @@ function renderStaffJailControls(uid, name){
     }
   });
   wrap.appendChild(clearBtn);
+
+  const banBtn = document.createElement('button');
+  banBtn.className = 'mini-btn'; banBtn.style.marginLeft = '8px'; banBtn.textContent = 'remover proibição de prender (se tiver)';
+  banBtn.addEventListener('click', async ()=>{
+    const msgEl = document.getElementById('profileMsg');
+    banBtn.textContent = 'removendo…';
+    try{
+      const resp = await fetch(EDGE_FUNCTIONS_BASE+'/staff-jail-override', {
+        method:'POST', headers: edgeFunctionHeaders(),
+        body: JSON.stringify({staffUid: myId, targetUid: uid, action: 'clear_punishment'})
+      });
+      const data = await resp.json();
+      if(!resp.ok) throw new Error(data.error || 'falha na ação');
+      banBtn.textContent = '✓ removida';
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'proibição de prender removida (se existia alguma).';
+      setTimeout(()=>{ banBtn.textContent = 'remover proibição de prender (se tiver)'; }, 1800);
+    }catch(e){
+      console.error(e);
+      banBtn.textContent = 'remover proibição de prender (se tiver)';
+      msgEl.style.color = 'var(--danger)'; msgEl.textContent = e.message || 'erro ao remover proibição.';
+    }
+  });
+  wrap.appendChild(banBtn);
   zone.appendChild(wrap);
 }
 
