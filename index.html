@@ -330,7 +330,8 @@
 </div>
 
 <div id="jailOverlay" style="display:none; position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:80; pointer-events:none;">
-  <div style="pointer-events:auto; width:min(360px,92vw); background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--danger); border-radius:12px; padding:12px 16px; text-align:center; box-shadow:0 6px 24px rgba(0,0,0,.5);">
+  <div id="jailPanelFull" style="pointer-events:auto; width:min(360px,92vw); background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--danger); border-radius:12px; padding:12px 16px; text-align:center; box-shadow:0 6px 24px rgba(0,0,0,.5); position:relative;">
+    <button id="jailMinimizeBtn" title="minimizar" style="position:absolute; top:6px; right:8px; background:none; border:none; color:var(--text-dim); font-size:16px; cursor:pointer; padding:2px 6px; line-height:1;">–</button>
     <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
       <span style="font-size:18px;">🔒</span>
       <b>Você está preso</b>
@@ -339,6 +340,9 @@
     <button class="mini-btn warn" id="jailEscapeBtn" style="margin-top:8px;">Fugir por 50 moedas</button>
     <div class="errmsg" id="jailMsg"></div>
   </div>
+  <button id="jailPanelMini" style="display:none; pointer-events:auto; background:var(--bg-panel); border:2px solid var(--danger); border-radius:20px; padding:6px 14px; color:var(--text); font-weight:bold; box-shadow:0 4px 16px rgba(0,0,0,.5); cursor:pointer;">
+    🔒 <span id="jailMiniCountdown">—</span>
+  </button>
 </div>
 
 <div id="helpModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
@@ -2800,6 +2804,16 @@ function renderHelpStaffList(){
 let myJailedUntil = null, myJailedIn = null;
 let jailStatusRef = null;
 let jailCountdownInterval = null;
+let jailPanelMinimized = (localStorage.getItem('jailPanelMinimized') === '1');
+
+function setJailPanelMinimized(min){
+  jailPanelMinimized = min;
+  localStorage.setItem('jailPanelMinimized', min ? '1' : '0');
+  document.getElementById('jailPanelFull').style.display = min ? 'none' : 'block';
+  document.getElementById('jailPanelMini').style.display = min ? 'block' : 'none';
+}
+document.getElementById('jailMinimizeBtn').addEventListener('click', ()=> setJailPanelMinimized(true));
+document.getElementById('jailPanelMini').addEventListener('click', ()=> setJailPanelMinimized(false));
 
 function startJailStatusWatcher(){
   if(jailStatusRef) jailStatusRef.off();
@@ -2828,15 +2842,18 @@ function updateJailOverlay(){
   const now = Date.now();
   if(myJailedUntil && myJailedUntil > now){
     overlay.style.display = 'block';
+    setJailPanelMinimized(jailPanelMinimized);
     if(jailCountdownInterval) clearInterval(jailCountdownInterval);
     const updateCountdown = ()=>{
       const remaining = myJailedUntil - Date.now();
       if(remaining <= 0){
         document.getElementById('jailCountdownLine').textContent = 'liberado!';
+        document.getElementById('jailMiniCountdown').textContent = 'liberado!';
         clearInterval(jailCountdownInterval);
         return;
       }
       document.getElementById('jailCountdownLine').textContent = 'tempo restante: ' + formatDuration(remaining);
+      document.getElementById('jailMiniCountdown').textContent = formatDuration(remaining);
     };
     updateCountdown();
     jailCountdownInterval = setInterval(updateCountdown, 1000);
