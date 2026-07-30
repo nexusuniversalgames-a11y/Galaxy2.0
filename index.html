@@ -2537,7 +2537,38 @@ async function openProfileModal(uid){
     if(profileFriendReqRef){ profileFriendReqRef.off(); profileFriendReqRef = null; }
     if(profileFriendsListRef){ profileFriendsListRef.off(); profileFriendsListRef = null; }
     renderFriendActionButton(uid, name, role);
+    renderStaffJailControls(uid, name);
   }
+}
+
+function renderStaffJailControls(uid, name){
+  const OVERRIDE_ROLES = ['dev_senior','dev','gm','mod_senior'];
+  if(!OVERRIDE_ROLES.includes(myRole)) return;
+  const zone = document.getElementById('profileFriendActionZone');
+  const wrap = document.createElement('div'); wrap.style.marginTop = '10px';
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'mini-btn'; clearBtn.textContent = 'remover punição de prender (se tiver)';
+  clearBtn.addEventListener('click', async ()=>{
+    const msgEl = document.getElementById('profileMsg');
+    clearBtn.textContent = 'removendo…';
+    try{
+      const resp = await fetch(EDGE_FUNCTIONS_BASE+'/staff-jail-override', {
+        method:'POST', headers: edgeFunctionHeaders(),
+        body: JSON.stringify({staffUid: myId, targetUid: uid, action: 'clear_punishment'})
+      });
+      const data = await resp.json();
+      if(!resp.ok) throw new Error(data.error || 'falha na ação');
+      clearBtn.textContent = '✓ removida';
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'punição removida (se existia alguma).';
+      setTimeout(()=>{ clearBtn.textContent = 'remover punição de prender (se tiver)'; }, 1800);
+    }catch(e){
+      console.error(e);
+      clearBtn.textContent = 'remover punição de prender (se tiver)';
+      msgEl.style.color = 'var(--danger)'; msgEl.textContent = e.message || 'erro ao remover punição.';
+    }
+  });
+  wrap.appendChild(clearBtn);
+  zone.appendChild(wrap);
 }
 
 document.getElementById('profileEditNameBtn').addEventListener('click', ()=>{
