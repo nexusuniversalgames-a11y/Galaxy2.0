@@ -329,14 +329,14 @@
   </div>
 </div>
 
-<div id="jailOverlay" style="display:none; position:fixed; inset:0; z-index:80; background:rgba(5,7,20,.92); align-items:center; justify-content:center;">
-  <div style="width:min(380px,92vw); background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--danger); border-radius:14px; padding:24px 22px; text-align:center;">
-    <div style="font-size:34px;">🔒</div>
-    <h2 style="margin:10px 0 4px;">Você está preso</h2>
-    <div class="hint" id="jailInfoLine">—</div>
-    <div class="hint" id="jailCountdownLine" style="margin-top:6px; font-weight:bold; color:var(--danger);">—</div>
-    <div class="hint" style="margin-top:12px;">Sua prisão pode ser revisada pela equipe a qualquer momento. Enquanto isso, você não pode trocar de sala.</div>
-    <button class="btn secondary" id="jailEscapeBtn" style="margin-top:16px;">Fugir por 50 moedas</button>
+<div id="jailOverlay" style="display:none; position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:80; pointer-events:none;">
+  <div style="pointer-events:auto; width:min(360px,92vw); background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--danger); border-radius:12px; padding:12px 16px; text-align:center; box-shadow:0 6px 24px rgba(0,0,0,.5);">
+    <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
+      <span style="font-size:18px;">🔒</span>
+      <b>Você está preso</b>
+    </div>
+    <div class="hint" id="jailCountdownLine" style="margin-top:4px; font-weight:bold; color:var(--danger);">—</div>
+    <button class="mini-btn warn" id="jailEscapeBtn" style="margin-top:8px;">Fugir por 50 moedas</button>
     <div class="errmsg" id="jailMsg"></div>
   </div>
 </div>
@@ -2772,8 +2772,7 @@ function updateJailOverlay(){
   const overlay = document.getElementById('jailOverlay');
   const now = Date.now();
   if(myJailedUntil && myJailedUntil > now){
-    overlay.style.display = 'flex';
-    document.getElementById('jailInfoLine').textContent = 'Você foi preso. Fica trancado até o tempo acabar, sua prisão ser revisada, ou você pagar pra fugir.';
+    overlay.style.display = 'block';
     if(jailCountdownInterval) clearInterval(jailCountdownInterval);
     const updateCountdown = ()=>{
       const remaining = myJailedUntil - Date.now();
@@ -2786,12 +2785,24 @@ function updateJailOverlay(){
     };
     updateCountdown();
     jailCountdownInterval = setInterval(updateCountdown, 1000);
-    if(currentRoom && currentRoom !== myJailedIn){
-      leaveRoom();
+    document.getElementById('leaveBtn').style.display = 'none';
+    document.getElementById('switchMapBtn').style.display = 'none';
+    if(myJailedIn && currentRoom !== myJailedIn){
+      enterAssignedPrisonRoom();
     }
   } else {
     overlay.style.display = 'none';
     if(jailCountdownInterval){ clearInterval(jailCountdownInterval); jailCountdownInterval = null; }
+    document.getElementById('leaveBtn').style.display = '';
+  }
+}
+async function enterAssignedPrisonRoom(){
+  try{
+    const metaSnap = await db.ref('rooms/'+myJailedIn+'/meta').once('value');
+    const meta = metaSnap.val();
+    await enterRoom(myJailedIn, (meta && meta.name) || 'Prisão');
+  }catch(e){
+    console.error('erro ao entrar na sala de prisão:', e);
   }
 }
 
@@ -2874,6 +2885,7 @@ async function renderPanelTab(){
 }
 async function renderJailsTab(){
   panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
+  const canOverride = ['dev_senior','dev','gm','mod_senior'].includes(myRole);
   try{
     const snap = await db.ref('pendingJailReviews').once('value');
     const val = snap.val() || {};
@@ -2884,25 +2896,68 @@ async function renderJailsTab(){
       panelBodyEl.appendChild(empty);
       return;
     }
-    ids.forEach(targetUid=>{
+    for(const targetUid of ids){
       const p = val[targetUid];
       const row = document.createElement('div'); row.className='prow';
       row.style.display='flex'; row.style.flexDirection='column'; row.style.gap='6px'; row.style.padding='10px 0'; row.style.borderBottom='1px solid var(--line)';
       const info = document.createElement('div');
       info.innerHTML = `<b>${escapeHtml(p.targetName||'???')}</b> — preso por <b>${escapeHtml(p.jailedByName||'???')}</b>`;
       row.appendChild(info);
-      const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.gap='8px';
+
+      if(p.historyEntryId){
+        try{
+          const histSnap = await db.ref('jailHistory/'+targetUid+'/'+p.historyEntryId).once('value');
+          const hist = histSnap.val();
+          const msgs = (hist && hist.recentMessages) || [];
+          const msgBox = document.createElement('div');
+          msgBox.style.cssText = 'background:rgba(0,0,0,.25); border-radius:6px; padding:6px 8px; font-size:12px; max-height:120px; overflow:auto;';
+          if(!msgs.length){
+            msgBox.innerHTML = '<span class="hint">sem mensagens recentes dele nos últimos 10 min.</span>';
+          } else {
+            msgBox.innerHTML = msgs.map(m=>`<div>${escapeHtml(m.text||'')}</div>`).join('');
+          }
+          row.appendChild(msgBox);
+        }catch(e){ console.error(e); }
+      }
+
+      const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.gap='8px'; btnRow.style.flexWrap='wrap';
       const fairBtn = document.createElement('button'); fairBtn.className='mini-btn ok'; fairBtn.textContent='justa';
       fairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'fair'));
       const unfairBtn = document.createElement('button'); unfairBtn.className='mini-btn warn'; unfairBtn.textContent='injusta';
       unfairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'unfair'));
       btnRow.appendChild(fairBtn); btnRow.appendChild(unfairBtn);
+
+      if(canOverride){
+        const releaseBtn = document.createElement('button'); releaseBtn.className='mini-btn'; releaseBtn.textContent='liberar agora';
+        releaseBtn.addEventListener('click', ()=>staffJailOverride(targetUid, 'release'));
+        btnRow.appendChild(releaseBtn);
+        if(p.jailedBy){
+          const clearBtn = document.createElement('button'); clearBtn.className='mini-btn'; clearBtn.textContent='remover punição de quem prendeu';
+          clearBtn.addEventListener('click', ()=>staffJailOverride(p.jailedBy, 'clear_punishment'));
+          btnRow.appendChild(clearBtn);
+        }
+      }
+
       row.appendChild(btnRow);
       panelBodyEl.appendChild(row);
-    });
+    }
   }catch(e){
     console.error(e);
     panelBodyEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
+}
+async function staffJailOverride(targetUid, action){
+  try{
+    const resp = await fetch(EDGE_FUNCTIONS_BASE+'/staff-jail-override', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({staffUid: myId, targetUid, action})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'falha na ação');
+    renderJailsTab();
+  }catch(e){
+    console.error(e);
+    alert(e.message || 'erro ao executar ação');
   }
 }
 async function reviewJail(targetUid, verdict){
@@ -3009,6 +3064,27 @@ async function renderRolesTab(){
       });
     }
 
+    let coinsBtn;
+    if(canVip){
+      coinsBtn = document.createElement('button'); coinsBtn.className='mini-btn ok'; coinsBtn.textContent='+10 moedas';
+      coinsBtn.addEventListener('click', async ()=>{
+        const amountStr = prompt('Quantas moedas conceder a ' + (u.name||'este usuário') + '? (número negativo remove)', '10');
+        if(amountStr === null) return;
+        const amount = parseInt(amountStr, 10);
+        if(!Number.isFinite(amount) || amount === 0){ alert('valor inválido'); return; }
+        coinsBtn.textContent='enviando…';
+        try{
+          const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-grant-coins', {
+            method:'POST', headers: edgeFunctionHeaders(),
+            body: JSON.stringify({targetUid: uid, amount, grantedBy: myId})
+          });
+          if(!resp.ok) throw new Error('falha na requisição');
+          coinsBtn.textContent='✓ feito';
+          setTimeout(()=>{ coinsBtn.textContent='+10 moedas'; }, 1500);
+        }catch(e){ console.error('erro ao conceder moedas:', e); coinsBtn.textContent='erro'; }
+      });
+    }
+
     let levelSel, levelBtn;
     if(canLevel){
       levelSel = document.createElement('select');
@@ -3038,14 +3114,14 @@ async function renderRolesTab(){
       const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
       right.appendChild(sel); right.appendChild(btn);
       if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
-      if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); right.appendChild(vipRemoveBtn); }
+      if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); right.appendChild(vipRemoveBtn); right.appendChild(coinsBtn); }
       row.appendChild(right);
     } else {
       row.innerHTML = `<div class="info">${escapeHtml(u.name||'???')}<div class="sub">${escapeHtml(u.email||'')}</div></div><span class="role-badge" style="background:${roleInfo.color}33;color:${roleInfo.color};">${roleInfo.label}</span>`;
       if(canLevel || canVip){
         const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center'; right.style.flexWrap='wrap';
         if(canLevel){ right.appendChild(levelSel); right.appendChild(levelBtn); }
-        if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); right.appendChild(vipRemoveBtn); }
+        if(canVip){ right.appendChild(vipSel); right.appendChild(vipBtn); right.appendChild(vipRemoveBtn); right.appendChild(coinsBtn); }
         row.appendChild(right);
       }
     }
