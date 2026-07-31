@@ -210,6 +210,7 @@
           <button id="openHelpBtnLobby">ajuda</button>
           <button id="myJailLogBtn">minhas prisões</button>
           <button id="myPunishmentsBtn" style="position:relative;">minhas punições <span id="myPunishmentsDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
+          <button id="shortcutsBtn" style="display:none;">atalhos</button>
           <button id="dmInboxBtn" style="position:relative;">mensagens <span id="dmUnreadDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
@@ -364,6 +365,22 @@
     <div style="display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--line);">
       <input type="text" id="dmThreadInput" maxlength="500" placeholder="escreva uma mensagem…" style="flex:1;">
       <button class="btn" id="dmThreadSendBtn">enviar</button>
+    </div>
+  </div>
+</div>
+
+<div id="shortcutsModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Atalhos</h2><button id="shortcutsModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div>
+        <b>🌱 Salas de novato</b>
+        <div id="shortcutsNewbieList" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;"></div>
+      </div>
+      <div id="shortcutsPrisonSection" style="margin-top:18px;">
+        <b>🔒 Salas de prisão</b>
+        <div id="shortcutsPrisonList" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1589,6 +1606,7 @@ function enterLobbyUI(){
   }
   document.getElementById('panelBtnLobby').style.display = isStaff(myRole) ? 'inline-block' : 'none';
   document.getElementById('panelBtn').style.display = isStaff(myRole) ? 'inline-block' : 'none';
+  document.getElementById('shortcutsBtn').style.display = rankOf(myRole) >= ROLES.mentor.rank ? 'inline-block' : 'none';
   document.getElementById('switchMapBtn').style.display = canCreateRoom(myRole) ? 'inline-block' : 'none';
   document.getElementById('markPrisonRoomBtn').style.display = canManageMaps(myRole) ? 'inline-block' : 'none';
   document.getElementById('markNewbieRoomBtn').style.display = canManageMaps(myRole) ? 'inline-block' : 'none';
@@ -2848,7 +2866,48 @@ let helpCurrentTab = 'mentores';
 document.getElementById('openHelpBtnLobby').addEventListener('click', ()=>openHelpModal());
 document.getElementById('helpModalClose').addEventListener('click', ()=>{ helpModal.style.display = 'none'; });
 
-const myPunishmentsModal = document.getElementById('myPunishmentsModal');
+const shortcutsModal = document.getElementById('shortcutsModal');
+document.getElementById('shortcutsBtn').addEventListener('click', ()=>openShortcutsModal());
+document.getElementById('shortcutsModalClose').addEventListener('click', ()=>{ shortcutsModal.style.display = 'none'; });
+
+async function loadShortcutRoomList(configPath, listElId){
+  const listEl = document.getElementById(listElId);
+  listEl.innerHTML = '<div class="empty" style="padding:4px 0;">carregando…</div>';
+  try{
+    const snap = await db.ref(configPath).once('value');
+    const ids = Object.keys(snap.val() || {});
+    if(!ids.length){
+      listEl.innerHTML = '<div class="empty" style="padding:4px 0;">nenhuma sala marcada ainda.</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    for(const id of ids){
+      let roomName = id;
+      try{
+        const nameSnap = await db.ref('rooms/'+id+'/meta/name').once('value');
+        if(nameSnap.val()) roomName = nameSnap.val();
+      }catch(e){}
+      const row = document.createElement('div'); row.className='prow';
+      row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+      row.innerHTML = `<div class="info">${escapeHtml(roomName)}</div>`;
+      const enterBtn = document.createElement('button'); enterBtn.className='mini-btn ok'; enterBtn.textContent='entrar →';
+      enterBtn.addEventListener('click', ()=>{ shortcutsModal.style.display = 'none'; enterRoom(id, roomName); });
+      row.appendChild(enterBtn);
+      listEl.appendChild(row);
+    }
+  }catch(e){
+    console.error('erro ao carregar atalhos:', e);
+    listEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
+}
+
+function openShortcutsModal(){
+  shortcutsModal.style.display = 'flex';
+  loadShortcutRoomList('config/newbieRooms', 'shortcutsNewbieList');
+  const canSeePrison = ['dev_senior','dev','gm','mod_senior','mod'].includes(myRole);
+  document.getElementById('shortcutsPrisonSection').style.display = canSeePrison ? 'block' : 'none';
+  if(canSeePrison) loadShortcutRoomList('config/prisonRooms', 'shortcutsPrisonList');
+}
 document.getElementById('myPunishmentsBtn').addEventListener('click', ()=>{ myPunishmentsModal.style.display = 'flex'; renderMyPunishments(); });
 document.getElementById('myPunishmentsModalClose').addEventListener('click', ()=>{ myPunishmentsModal.style.display = 'none'; });
 
