@@ -1746,26 +1746,55 @@ function openMapSwitchModal(){
 document.getElementById('switchMapBtn').addEventListener('click', openMapSwitchModal);
 document.getElementById('markPrisonRoomBtn').addEventListener('click', async ()=>{
   if(!currentRoom) return;
-  if(!confirm('Marcar "' + document.getElementById('currentRoomName').textContent + '" como sala de prisão? Jogadores presos serão mandados pra cá.')) return;
   try{
-    await db.ref('config/prisonRooms/'+currentRoom).set(true);
-    alert('Sala marcada como sala de prisão!');
+    const snap = await db.ref('config/prisonRooms/'+currentRoom).once('value');
+    const isMarked = snap.val() === true;
+    if(isMarked){
+      if(!confirm('Remover "' + document.getElementById('currentRoomName').textContent + '" da lista de salas de prisão?')) return;
+      await db.ref('config/prisonRooms/'+currentRoom).remove();
+      alert('Sala removida da lista de prisão!');
+    } else {
+      if(!confirm('Marcar "' + document.getElementById('currentRoomName').textContent + '" como sala de prisão? Jogadores presos serão mandados pra cá.')) return;
+      await db.ref('config/prisonRooms/'+currentRoom).set(true);
+      alert('Sala marcada como sala de prisão!');
+    }
+    updateRoomMarkButtons();
   }catch(e){
     console.error(e);
-    alert('erro ao marcar (veja o Console/F12).');
+    alert('erro ao atualizar (veja o Console/F12).');
   }
 });
 document.getElementById('markNewbieRoomBtn').addEventListener('click', async ()=>{
   if(!currentRoom) return;
-  if(!confirm('Marcar "' + document.getElementById('currentRoomName').textContent + '" como sala de novato? Só novos usuários, dev, gm, moderador sênior, mentor sênior e mentor vão poder entrar.')) return;
   try{
-    await db.ref('config/newbieRooms/'+currentRoom).set(true);
-    alert('Sala marcada como sala de novato!');
+    const snap = await db.ref('config/newbieRooms/'+currentRoom).once('value');
+    const isMarked = snap.val() === true;
+    if(isMarked){
+      if(!confirm('Remover "' + document.getElementById('currentRoomName').textContent + '" da lista de salas de novato?')) return;
+      await db.ref('config/newbieRooms/'+currentRoom).remove();
+      alert('Sala removida da lista de novato!');
+    } else {
+      if(!confirm('Marcar "' + document.getElementById('currentRoomName').textContent + '" como sala de novato? Só novos usuários, dev, gm, moderador sênior, mentor sênior e mentor vão poder entrar.')) return;
+      await db.ref('config/newbieRooms/'+currentRoom).set(true);
+      alert('Sala marcada como sala de novato!');
+    }
+    updateRoomMarkButtons();
   }catch(e){
     console.error(e);
-    alert('erro ao marcar (veja o Console/F12).');
+    alert('erro ao atualizar (veja o Console/F12).');
   }
 });
+async function updateRoomMarkButtons(){
+  if(!currentRoom || !canManageMaps(myRole)) return;
+  try{
+    const [prisonSnap, newbieSnap] = await Promise.all([
+      db.ref('config/prisonRooms/'+currentRoom).once('value'),
+      db.ref('config/newbieRooms/'+currentRoom).once('value'),
+    ]);
+    document.getElementById('markPrisonRoomBtn').textContent = prisonSnap.val() === true ? 'remover marcação de sala de prisão' : 'marcar como sala de prisão';
+    document.getElementById('markNewbieRoomBtn').textContent = newbieSnap.val() === true ? 'remover marcação de sala de novato' : 'marcar como sala de novato';
+  }catch(e){ console.error('erro ao checar marcação da sala:', e); }
+}
 document.getElementById('mapSwitchModalClose').addEventListener('click', ()=>{ mapSwitchModal.style.display='none'; });
 document.getElementById('saveSwitchMapBtn').addEventListener('click', async ()=>{
   if(!currentRoom) return;
@@ -2423,6 +2452,7 @@ async function enterRoom(id, name){
   await cleanupStalePresence(id);
 
   currentRoom = id;
+  updateRoomMarkButtons();
   document.getElementById('lobby-screen').style.display='none';
   document.getElementById('room-screen').style.display='block';
   document.getElementById('currentRoomName').textContent = name;
@@ -2720,6 +2750,24 @@ function renderStaffJailControls(uid, name){
     }
   });
   wrap.appendChild(banBtn);
+
+  const dmBanBtn = document.createElement('button');
+  dmBanBtn.className = 'mini-btn'; dmBanBtn.style.marginLeft = '8px'; dmBanBtn.style.marginTop = '6px'; dmBanBtn.textContent = 'remover proibição de mensagem privada (se tiver)';
+  dmBanBtn.addEventListener('click', async ()=>{
+    const msgEl = document.getElementById('profileMsg');
+    dmBanBtn.textContent = 'removendo…';
+    try{
+      await db.ref('users/'+uid+'/dmBanUntil').set(null);
+      dmBanBtn.textContent = '✓ removida';
+      msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'proibição de mensagem privada removida (se existia alguma).';
+      setTimeout(()=>{ dmBanBtn.textContent = 'remover proibição de mensagem privada (se tiver)'; }, 1800);
+    }catch(e){
+      console.error(e);
+      dmBanBtn.textContent = 'remover proibição de mensagem privada (se tiver)';
+      msgEl.style.color = 'var(--danger)'; msgEl.textContent = e.message || 'erro ao remover proibição de mensagem privada.';
+    }
+  });
+  wrap.appendChild(dmBanBtn);
   zone.appendChild(wrap);
 }
 
