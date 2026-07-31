@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nébula — mundo 3D pra andar e conversar</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a0e27">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nébula">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -212,6 +220,7 @@
           <button id="myPunishmentsBtn" style="position:relative;">minhas punições <span id="myPunishmentsDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="shortcutsBtn" style="display:none;">atalhos</button>
           <button id="findPlayerBtn">buscar jogador</button>
+          <button id="gangsBtn">gangues</button>
           <button id="dmInboxBtn" style="position:relative;">mensagens <span id="dmUnreadDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
@@ -366,6 +375,21 @@
     <div style="display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--line);">
       <input type="text" id="dmThreadInput" maxlength="500" placeholder="escreva uma mensagem…" style="flex:1;">
       <button class="btn" id="dmThreadSendBtn">enviar</button>
+    </div>
+  </div>
+</div>
+
+<div id="gangsModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(440px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Gangues</h2><button id="gangsModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div id="gangsMyGangBox" style="margin-bottom:14px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <input type="text" id="gangNameInput" maxlength="24" placeholder="nome da nova gangue…" style="flex:1;">
+        <button class="btn" id="createGangBtn">criar</button>
+      </div>
+      <div class="hint" style="margin-bottom:10px;">Gangues com <span style="color:#4ade80;">✔️</span> são oficiais da equipe. As outras são criadas livremente pelos jogadores.</div>
+      <div id="gangsList" style="display:flex; flex-direction:column; gap:8px;"></div>
     </div>
   </div>
 </div>
@@ -560,6 +584,7 @@ function isStaff(role){ return rankOf(role) >= ROLES.mentor.rank; }
 function canTestAura(role){ return rankOf(role) >= ROLES.dev.rank; }
 function canManageVRM(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos personagens VRM pro jogo todo
 function canManageMaps(role){ return rankOf(role) >= ROLES.dev.rank; } // só devs podem adicionar novos mapas pro jogo todo
+function canManageGangs(role){ return rankOf(role) >= ROLES.mod_senior.rank; } // dev/gm/moderador sênior marcam gangue oficial
 function assignableRoles(actorRole, targetCurrentRole){
   if(actorRole === 'dev_senior') return Object.keys(ROLES);
   if(actorRole === 'dev'){
@@ -2679,6 +2704,20 @@ async function openProfileModal(uid){
   const coinsLine = document.getElementById('profileCoinsLine');
   const friendsSection = document.getElementById('profileFriendsSection');
 
+  db.ref('users/'+uid+'/gangId').once('value').then(gangIdSnap=>{
+    const gid = gangIdSnap.val();
+    if(!gid) return;
+    return db.ref('gangs/'+gid).once('value').then(gangSnap=>{
+      const g = gangSnap.val();
+      if(!g || profileViewingUid !== uid) return;
+      const gangBadge = document.createElement('span'); gangBadge.className='role-badge';
+      const officialMark = g.official ? '✔️ ' : '';
+      gangBadge.style.background='#8b5cf633'; gangBadge.style.color='#8b5cf6';
+      gangBadge.textContent = officialMark + g.name;
+      badges.appendChild(gangBadge);
+    });
+  }).catch(()=>{});
+
   const locationLine = document.getElementById('profileLocationLine');
   if(activeRoom){
     locationLine.textContent = '📍 carregando localização…';
@@ -2965,7 +3004,109 @@ let helpCurrentTab = 'mentores';
 document.getElementById('openHelpBtnLobby').addEventListener('click', ()=>openHelpModal());
 document.getElementById('helpModalClose').addEventListener('click', ()=>{ helpModal.style.display = 'none'; });
 
-const findPlayerModal = document.getElementById('findPlayerModal');
+const gangsModal = document.getElementById('gangsModal');
+let gangsCache = {};
+let myGangId = null;
+document.getElementById('gangsBtn').addEventListener('click', ()=>openGangsModal());
+document.getElementById('gangsModalClose').addEventListener('click', ()=>{ gangsModal.style.display = 'none'; });
+
+async function openGangsModal(){
+  gangsModal.style.display = 'flex';
+  document.getElementById('gangsMyGangBox').innerHTML = '<div class="empty">carregando…</div>';
+  document.getElementById('gangsList').innerHTML = '';
+  try{
+    const [myGangSnap, gangsSnap] = await Promise.all([
+      db.ref('users/'+myId+'/gangId').once('value'),
+      db.ref('gangs').once('value'),
+    ]);
+    myGangId = myGangSnap.val() || null;
+    gangsCache = gangsSnap.val() || {};
+    renderGangsMyGangBox();
+    renderGangsList();
+  }catch(e){
+    console.error('erro ao carregar gangues:', e);
+    document.getElementById('gangsMyGangBox').innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
+}
+
+function renderGangsMyGangBox(){
+  const box = document.getElementById('gangsMyGangBox');
+  if(!myGangId || !gangsCache[myGangId]){
+    box.innerHTML = '<div class="hint">você ainda não está em nenhuma gangue.</div>';
+    return;
+  }
+  const g = gangsCache[myGangId];
+  const officialBadge = g.official ? ' <span style="color:#4ade80;">✔️ oficial</span>' : '';
+  box.innerHTML = `<div style="background:rgba(255,255,255,.04); border:1px solid var(--nebula-soft); border-radius:10px; padding:10px 12px;">
+    <div>sua gangue: <b>${escapeHtml(g.name)}</b>${officialBadge}</div>
+  </div>`;
+  const leaveBtn = document.createElement('button');
+  leaveBtn.className = 'mini-btn warn'; leaveBtn.style.marginTop = '8px'; leaveBtn.textContent = 'sair da gangue';
+  leaveBtn.addEventListener('click', ()=>leaveGang(myGangId));
+  box.appendChild(leaveBtn);
+}
+
+function renderGangsList(){
+  const listEl = document.getElementById('gangsList');
+  const entries = Object.entries(gangsCache).sort((a,b)=> (b[1].official?1:0) - (a[1].official?1:0) || a[1].name.localeCompare(b[1].name));
+  if(!entries.length){
+    listEl.innerHTML = '<div class="empty">nenhuma gangue criada ainda. seja o primeiro!</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  entries.forEach(([id, g])=>{
+    const row = document.createElement('div');
+    row.style.cssText = 'background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:10px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px;';
+    const officialBadge = g.official ? ' <span style="color:#4ade80;">✔️</span>' : '';
+    const memberCount = g.members ? Object.keys(g.members).length : 0;
+    row.innerHTML = `<div><b>${escapeHtml(g.name)}</b>${officialBadge}<div class="hint" style="font-size:11px;">${memberCount} membro(s) — dono: ${escapeHtml(g.ownerName||'???')}</div></div>`;
+    const btn = document.createElement('button'); btn.className = 'mini-btn';
+    if(myGangId === id){
+      btn.textContent = 'sair'; btn.classList.add('warn');
+      btn.addEventListener('click', ()=>leaveGang(id));
+    } else {
+      btn.textContent = 'entrar'; btn.classList.add('ok');
+      btn.addEventListener('click', ()=>joinGang(id, g.name));
+    }
+    row.appendChild(btn);
+    listEl.appendChild(row);
+  });
+}
+
+document.getElementById('createGangBtn').addEventListener('click', async ()=>{
+  const input = document.getElementById('gangNameInput');
+  const name = input.value.trim().slice(0,24);
+  if(!name) return;
+  if(myGangId){ alert('Você já está numa gangue — saia dela primeiro pra criar outra.'); return; }
+  try{
+    const ref = db.ref('gangs').push();
+    await ref.set({
+      name, ownerUid: myId, ownerName: myName, createdAt: Date.now(), official: false,
+      members: { [myId]: { name: myName, joinedAt: Date.now() } },
+    });
+    await db.ref('users/'+myId+'/gangId').set(ref.key);
+    input.value = '';
+    await openGangsModal();
+  }catch(e){ console.error('erro ao criar gangue:', e); alert('erro ao criar gangue (veja o Console/F12).'); }
+});
+
+async function joinGang(gangId, gangName){
+  if(myGangId){ alert('Você já está na gangue "' + (gangsCache[myGangId]||{}).name + '" — saia dela primeiro.'); return; }
+  try{
+    await db.ref('gangs/'+gangId+'/members/'+myId).set({ name: myName, joinedAt: Date.now() });
+    await db.ref('users/'+myId+'/gangId').set(gangId);
+    await openGangsModal();
+  }catch(e){ console.error('erro ao entrar na gangue:', e); alert('erro ao entrar (veja o Console/F12).'); }
+}
+
+async function leaveGang(gangId){
+  if(!confirm('Sair dessa gangue?')) return;
+  try{
+    await db.ref('gangs/'+gangId+'/members/'+myId).remove();
+    await db.ref('users/'+myId+'/gangId').remove();
+    await openGangsModal();
+  }catch(e){ console.error('erro ao sair da gangue:', e); alert('erro ao sair (veja o Console/F12).'); }
+}
 let allUsersCache = null;
 document.getElementById('findPlayerBtn').addEventListener('click', ()=>openFindPlayerModal());
 document.getElementById('findPlayerModalClose').addEventListener('click', ()=>{ findPlayerModal.style.display = 'none'; });
@@ -3562,6 +3703,7 @@ function openPanel(){
   if(canSeeReportsTab(myRole)) tabs.push({id:'jails', label:'Prisões'});
   if(canSeeNewUsersTab(myRole)) tabs.push({id:'newusers', label:'Novos usuários'});
   if(canManageMaps(myRole)) tabs.push({id:'maps', label:'Mapas'});
+  if(canManageGangs(myRole)) tabs.push({id:'gangs', label:'Gangues'});
   panelTabsEl.innerHTML='';
   tabs.forEach((t,i)=>{
     const b = document.createElement('button');
@@ -3587,6 +3729,41 @@ async function renderPanelTab(){
   if(panelCurrentTab === 'jails') return renderJailsTab();
   if(panelCurrentTab === 'newusers') return renderNewUsersTab();
   if(panelCurrentTab === 'maps') return renderMapsTab();
+  if(panelCurrentTab === 'gangs') return renderGangsAdminTab();
+}
+async function renderGangsAdminTab(){
+  panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
+  try{
+    const snap = await db.ref('gangs').once('value');
+    const gangs = snap.val() || {};
+    panelBodyEl.innerHTML = '';
+    const entries = Object.entries(gangs).sort((a,b)=> a[1].name.localeCompare(b[1].name));
+    if(!entries.length){
+      panelBodyEl.innerHTML = '<div class="empty">nenhuma gangue criada ainda.</div>';
+      return;
+    }
+    entries.forEach(([id, g])=>{
+      const row = document.createElement('div'); row.className = 'prow';
+      row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.gap = '8px'; row.style.flexWrap = 'wrap';
+      const memberCount = g.members ? Object.keys(g.members).length : 0;
+      const officialBadge = g.official ? ' <span style="color:#4ade80;">✔️ oficial</span>' : '';
+      row.innerHTML = `<div class="info"><b>${escapeHtml(g.name)}</b>${officialBadge}<div class="sub">${memberCount} membro(s) — dono: ${escapeHtml(g.ownerName||'???')}</div></div>`;
+      const btn = document.createElement('button');
+      btn.className = g.official ? 'mini-btn warn' : 'mini-btn ok';
+      btn.textContent = g.official ? 'remover selo oficial' : 'marcar como oficial';
+      btn.addEventListener('click', async ()=>{
+        try{
+          await db.ref('gangs/'+id+'/official').set(!g.official);
+          renderGangsAdminTab();
+        }catch(e){ console.error(e); alert('erro ao atualizar (veja o Console/F12).'); }
+      });
+      row.appendChild(btn);
+      panelBodyEl.appendChild(row);
+    });
+  }catch(e){
+    console.error('erro ao carregar gangues:', e);
+    panelBodyEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
 }
 async function renderJailsTab(){
   panelBodyEl.innerHTML = '<div class="empty">carregando…</div>';
@@ -3908,6 +4085,12 @@ async function renderNewUsersTab(){
 
 initAvatarPreview();
 updateAvatarLabel();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').catch(e=>console.error('erro ao registrar service worker:', e));
+  });
+}
 </script>
 </body>
 </html>
