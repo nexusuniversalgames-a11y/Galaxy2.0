@@ -211,6 +211,7 @@
           <button id="myJailLogBtn">minhas prisões</button>
           <button id="myPunishmentsBtn" style="position:relative;">minhas punições <span id="myPunishmentsDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="shortcutsBtn" style="display:none;">atalhos</button>
+          <button id="findPlayerBtn">buscar jogador</button>
           <button id="dmInboxBtn" style="position:relative;">mensagens <span id="dmUnreadDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
@@ -369,6 +370,16 @@
   </div>
 </div>
 
+<div id="findPlayerModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Buscar jogador</h2><button id="findPlayerModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <input type="text" id="findPlayerInput" placeholder="digite o nome…" style="width:100%; margin-bottom:10px;">
+      <div id="findPlayerResults" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+  </div>
+</div>
+
 <div id="shortcutsModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
   <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
     <div class="panelHead"><h2>Atalhos</h2><button id="shortcutsModalClose">×</button></div>
@@ -449,6 +460,7 @@
         <button class="btn secondary" id="profileNameSaveBtn" style="margin-top:6px;">Confirmar troca</button>
       </div>
       <div id="profileBadges" style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;"></div>
+      <div id="profileLocationLine" class="hint" style="text-align:center; margin-top:6px; font-size:12px;"></div>
       <div id="profileCoinsLine" style="text-align:center; margin-top:8px; font-size:13px; color:var(--nebula-soft);"></div>
       <div id="profileFriendActionZone" style="margin-top:12px; text-align:center;"></div>
       <div id="profileFriendsSection" style="margin-top:18px; border-top:1px dashed var(--line); padding-top:14px; display:none;">
@@ -2613,9 +2625,10 @@ async function openProfileModal(uid){
   document.getElementById('profileNameInput').value = '';
 
   const isMe = uid === myId;
-  let name, level, avIndex, vrmId, vipActiveUntil, role;
+  let name, level, avIndex, vrmId, vipActiveUntil, role, activeRoom;
   if(isMe){
     name = myName; level = myLevel; avIndex = myAvatarIndex; vrmId = myVrmId; vipActiveUntil = myVipActiveUntil; role = myRole;
+    activeRoom = currentRoom || null;
   } else {
     const r = remote[uid] || null;
     let fresh = null;
@@ -2630,6 +2643,7 @@ async function openProfileModal(uid){
     vrmId = (fresh && fresh.vrmId) ?? (r && r.vrmId) ?? null;
     vipActiveUntil = (fresh && fresh.vipActiveUntil) ?? (r && r.vipActiveUntil) ?? null;
     role = (fresh ? (fresh.role || 'player') : (r && r.role)) || 'player';
+    activeRoom = (fresh && fresh.activeRoom) || (r ? currentRoom : null) || null;
   }
 
   document.getElementById('profileModalTitle').textContent = isMe ? 'Seu perfil' : ('Perfil de ' + name);
@@ -2663,6 +2677,17 @@ async function openProfileModal(uid){
 
   const coinsLine = document.getElementById('profileCoinsLine');
   const friendsSection = document.getElementById('profileFriendsSection');
+
+  const locationLine = document.getElementById('profileLocationLine');
+  if(activeRoom){
+    locationLine.textContent = '📍 carregando localização…';
+    db.ref('rooms/'+activeRoom+'/meta/name').once('value').then(nameSnap=>{
+      if(profileViewingUid !== uid) return; // usuário trocou de perfil enquanto carregava
+      locationLine.textContent = '🟢 online — em: ' + (nameSnap.val() || 'sala desconhecida');
+    }).catch(()=>{ locationLine.textContent = '🟢 online'; });
+  } else {
+    locationLine.textContent = '⚪ offline';
+  }
 
   if(isMe){
     friendsSection.style.display = 'block';
@@ -2920,6 +2945,8 @@ function watchOwnFriendsAndRequests(){
       const row = document.createElement('div'); row.className='prow';
       row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
       const info = document.createElement('div'); info.className='info'; info.textContent = (f && f.name) || '???';
+      info.style.cursor = 'pointer';
+      info.addEventListener('click', ()=>{ profileModal.style.display = 'none'; openProfileModal(otherUid); });
       row.appendChild(info);
       const rmBtn = document.createElement('button'); rmBtn.className='mini-btn warn'; rmBtn.textContent='remover';
       rmBtn.addEventListener('click', ()=>{
@@ -2937,7 +2964,56 @@ let helpCurrentTab = 'mentores';
 document.getElementById('openHelpBtnLobby').addEventListener('click', ()=>openHelpModal());
 document.getElementById('helpModalClose').addEventListener('click', ()=>{ helpModal.style.display = 'none'; });
 
-const shortcutsModal = document.getElementById('shortcutsModal');
+const findPlayerModal = document.getElementById('findPlayerModal');
+let allUsersCache = null;
+document.getElementById('findPlayerBtn').addEventListener('click', ()=>openFindPlayerModal());
+document.getElementById('findPlayerModalClose').addEventListener('click', ()=>{ findPlayerModal.style.display = 'none'; });
+
+async function openFindPlayerModal(){
+  findPlayerModal.style.display = 'flex';
+  document.getElementById('findPlayerInput').value = '';
+  document.getElementById('findPlayerResults').innerHTML = '<div class="hint">digite pelo menos 2 letras do nome…</div>';
+  if(!allUsersCache){
+    try{
+      const snap = await db.ref('users').once('value');
+      allUsersCache = snap.val() || {};
+    }catch(e){ console.error('erro ao carregar lista de jogadores:', e); allUsersCache = {}; }
+  }
+  document.getElementById('findPlayerInput').focus();
+}
+
+function renderFindPlayerResults(term){
+  const resultsEl = document.getElementById('findPlayerResults');
+  if(term.length < 2){
+    resultsEl.innerHTML = '<div class="hint">digite pelo menos 2 letras do nome…</div>';
+    return;
+  }
+  const t = term.toLowerCase();
+  const matches = Object.entries(allUsersCache || {})
+    .filter(([uid, u]) => (u.name||'').toLowerCase().includes(t))
+    .slice(0, 30);
+  if(!matches.length){
+    resultsEl.innerHTML = '<div class="empty">nenhum jogador encontrado com esse nome.</div>';
+    return;
+  }
+  resultsEl.innerHTML = '';
+  matches.forEach(([uid, u])=>{
+    const row = document.createElement('div'); row.className='prow'; row.style.cursor = 'pointer';
+    row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+    const info = document.createElement('div'); info.className='info'; info.textContent = u.name||'???';
+    row.appendChild(info);
+    if(u.role && u.role !== 'player'){
+      const roleInfo = ROLES[u.role] || ROLES.player;
+      const badge = document.createElement('span'); badge.className='role-badge';
+      badge.style.background = roleInfo.color+'33'; badge.style.color = roleInfo.color;
+      badge.textContent = roleInfo.label;
+      row.appendChild(badge);
+    }
+    row.addEventListener('click', ()=>{ findPlayerModal.style.display = 'none'; openProfileModal(uid); });
+    resultsEl.appendChild(row);
+  });
+}
+document.getElementById('findPlayerInput').addEventListener('input', e=> renderFindPlayerResults(e.target.value.trim()));
 document.getElementById('shortcutsBtn').addEventListener('click', ()=>openShortcutsModal());
 document.getElementById('shortcutsModalClose').addEventListener('click', ()=>{ shortcutsModal.style.display = 'none'; });
 
