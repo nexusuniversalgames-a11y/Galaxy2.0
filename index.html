@@ -2546,9 +2546,19 @@ async function openProfileModal(uid){
   if(isMe){
     name = myName; level = myLevel; avIndex = myAvatarIndex; vrmId = myVrmId; vipActiveUntil = myVipActiveUntil; role = myRole;
   } else {
-    const r = remote[uid];
-    if(!r){ document.getElementById('profileMsg').textContent = 'esse jogador não está mais na sala.'; return; }
-    name = r.name; level = r.level; avIndex = r.avatarIndex; vrmId = r.vrmId; vipActiveUntil = r.vipActiveUntil; role = r.role;
+    const r = remote[uid] || null;
+    let fresh = null;
+    try{
+      const freshSnap = await db.ref('users/'+uid).once('value');
+      fresh = freshSnap.val();
+    }catch(e){ console.error('erro ao buscar dados do perfil:', e); }
+    if(!r && !fresh){ document.getElementById('profileMsg').textContent = 'não encontrei esse jogador.'; return; }
+    name = (fresh && fresh.name) || (r && r.name) || '???';
+    level = (fresh && fresh.level) ?? (r && r.level) ?? 0;
+    avIndex = (fresh && fresh.avatarIndex) ?? (r && r.avatarIndex) ?? 0;
+    vrmId = (fresh && fresh.vrmId) ?? (r && r.vrmId) ?? null;
+    vipActiveUntil = (fresh && fresh.vipActiveUntil) ?? (r && r.vipActiveUntil) ?? null;
+    role = (fresh ? (fresh.role || 'player') : (r && r.role)) || 'player';
   }
 
   document.getElementById('profileModalTitle').textContent = isMe ? 'Seu perfil' : ('Perfil de ' + name);
