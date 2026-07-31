@@ -106,7 +106,7 @@
   #playerListMini .row .left{ display:flex; align-items:center; gap:6px; overflow:hidden; }
   #playerListMini .sw{ width:8px; height:8px; border-radius:2px; flex:none; }
   #playerListMini .rep{ background:none; border:none; color:#ff8a8a; cursor:pointer; font-size:11px; flex:none; }
-  #chatFeed{ position:absolute; bottom:70px; left:18px; z-index:5; width:min(320px, 60vw); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  #chatFeed{ position:absolute; bottom:150px; left:18px; z-index:6; width:min(320px, 60vw); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
   #chatFeed .fmsg{ background:rgba(10,14,39,.65); border-radius:6px; padding:5px 9px; font-size:12px; color:#fff; backdrop-filter:blur(3px); animation: fadeIn .2s ease; }
   #chatFeed .fmsg b{ color:var(--gold); }
   #chatFeed .fmsg.system{ color:#cfd4ff; font-style:italic; }
@@ -2194,10 +2194,11 @@ function resizeRenderer(){
 window.addEventListener('resize', ()=>{ if(renderer) resizeRenderer(); });
 
 function handleKeyDown(e){
-  const chatInputEl = document.getElementById('chatInput');
-  const chatOpen = document.getElementById('chatInputWrap').style.display === 'block';
-  if(!chatOpen && e.key === 'Enter' && currentRoom){ openChatInput(); e.preventDefault(); return; }
-  if(document.activeElement === chatInputEl) return;
+  const active = document.activeElement;
+  const isTyping = !!(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable));
+  const chatOpen = chatInputWrap.style.display === 'flex';
+  if(!chatOpen && !isTyping && e.key === 'Enter' && currentRoom){ openChatInput(); e.preventDefault(); return; }
+  if(isTyping) return;
   const k = e.key.toLowerCase();
   keys[k] = true;
   if(MOVE_KEYS.includes(k)) e.preventDefault();
