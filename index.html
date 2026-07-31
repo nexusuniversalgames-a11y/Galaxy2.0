@@ -1788,7 +1788,10 @@ let myChar, myMoving=false;
 const me = {x:0, z:6, rotY:0, targetRotY:0};
 let WORLD_RADIUS = 34;
 let collisionMeshes = []; // paredes/objetos do mapa customizado que bloqueiam o jogador
+let floorMeshes = [];     // pisos/escadas do mapa customizado, usados pro raycast de altura
 let mapDoors = [];        // objetos "Porta_*" do mapa customizado que abrem sozinhos
+const mapHeightRaycaster = new THREE.Raycaster();
+const DOWN_VEC = new THREE.Vector3(0,-1,0);
 const collisionRaycaster = new THREE.Raycaster();
 const PLAYER_RADIUS = 0.38;
 const remote = {};
@@ -1979,10 +1982,12 @@ function buildWorld(mapUrl){
 
   usingCustomMap = !!mapUrl;
   collisionMeshes = [];
+  floorMeshes = [];
   mapDoors = [];
   if(mapUrl){
     // mapa customizado enviado por um dev: carrega o .glb e pula a geração procedural padrão.
-    // OBS: mapas customizados usam chão "chato" (altura 0) — sem o relevo procedural do mapa padrão.
+    // A altura do chão segue a geometria de verdade do mapa via raycast (suporta escadas e
+    // mais de um andar), então não precisa mais ser sempre "chata".
     const loader = new THREE.GLTFLoader();
     loader.load(mapUrl,
       gltf=>{
@@ -1990,8 +1995,9 @@ function buildWorld(mapUrl){
           if(o.isMesh){
             o.castShadow = true; o.receiveShadow = true;
             const n = (o.name||'').toLowerCase();
-            const isFloorish = /piso|floor|ch[aã]o|ground|estrada|road|patio|p[aá]tio|quadra|terreno|cal[cç]ada|heliponto|\brua\b/.test(n);
-            if(!isFloorish) collisionMeshes.push(o);
+            const isFloorish = /piso|floor|ch[aã]o|ground|estrada|road|patio|p[aá]tio|quadra|terreno|cal[cç]ada|heliponto|\brua\b|escada|stair|degrau|step|rampa|ramp/.test(n);
+            if(isFloorish) floorMeshes.push(o);
+            else collisionMeshes.push(o);
             if(n.includes('porta')){
               mapDoors.push({
                 mesh:o,
@@ -2111,8 +2117,24 @@ function buildWorld(mapUrl){
     scene.add(bush);
   }
 }
-function groundHeightAt(x,z){
-  if(usingCustomMap) return 0;
+function groundHeightAt(x, z, refY){
+  if(usingCustomMap){
+    if(!floorMeshes.length) return refY!=null ? refY : 0;
+    const originY = (refY!=null ? refY : 0) + 6;
+    mapHeightRaycaster.set(new THREE.Vector3(x, originY, z), DOWN_VEC);
+    mapHeightRaycaster.far = 40;
+    const hits = mapHeightRaycaster.intersectObjects(floorMeshes, false);
+    if(!hits.length) return refY!=null ? refY : 0;
+    if(refY == null) return hits[0].point.y;
+    // com mais de um andar, pega o piso mais próximo da altura atual do jogador
+    // (evita "pular" pro andar de cima só porque ele está por cima de um buraco)
+    let best = hits[0], bestDiff = Math.abs(hits[0].point.y - refY);
+    for(let i=1;i<hits.length;i++){
+      const diff = Math.abs(hits[i].point.y - refY);
+      if(diff < bestDiff){ best = hits[i]; bestDiff = diff; }
+    }
+    return best.point.y;
+  }
   const base = Math.sin(x*0.06)*0.6 + Math.cos(z*0.05)*0.6 + Math.sin((x+z)*0.03)*0.4;
   const d = Math.hypot(x-POND.x, z-POND.z);
   const basin = -0.85;
@@ -2210,14 +2232,15 @@ function updateMe(dt){
   while(diff < -Math.PI) diff += Math.PI*2;
   me.rotY += diff * Math.min(1, dt*10);
 
-  myChar.position.set(me.x, groundHeightAt(me.x,me.z), me.z);
+  const myGroundY = groundHeightAt(me.x, me.z, myChar.position.y);
+  myChar.position.set(me.x, myGroundY, me.z);
   myChar.rotation.y = me.rotY;
   updateCharacterAnim(myChar, myMoving, dt);
 
   const camDist = 4.4, camHeight = 2.2;
-  const desired = new THREE.Vector3(me.x - Math.sin(me.rotY)*camDist, groundHeightAt(me.x,me.z) + camHeight, me.z - Math.cos(me.rotY)*camDist);
+  const desired = new THREE.Vector3(me.x - Math.sin(me.rotY)*camDist, myGroundY + camHeight, me.z - Math.cos(me.rotY)*camDist);
   camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
-  camera.lookAt(new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.15, me.z));
+  camera.lookAt(new THREE.Vector3(me.x, myGroundY+1.15, me.z));
 }
 
 function worldToScreen(vec3){
@@ -2233,7 +2256,7 @@ let myBubbleText=null, myBubbleUntil=0;
 
 function updateLabels(){
   const now = Date.now();
-  const myHead = new THREE.Vector3(me.x, groundHeightAt(me.x,me.z)+1.9, me.z);
+  const myHead = new THREE.Vector3(me.x, myChar.position.y+1.9, me.z);
   const s = worldToScreen(myHead);
   if(!s.behind){
     myLabelEl.style.left = s.x+'px'; myLabelEl.style.top = s.y+'px'; myLabelEl.style.display='block';
@@ -2285,7 +2308,7 @@ function gameLoop(t){
       const cx = r.group.position.x, cz = r.group.position.z;
       const nx = cx + (r.targetX-cx)*Math.min(1,dt*8);
       const nz = cz + (r.targetZ-cz)*Math.min(1,dt*8);
-      r.group.position.set(nx, groundHeightAt(nx,nz), nz);
+      r.group.position.set(nx, groundHeightAt(nx, nz, r.group.position.y), nz);
       let diff = r.targetRotY - r.group.rotation.y;
       while(diff > Math.PI) diff -= Math.PI*2;
       while(diff < -Math.PI) diff += Math.PI*2;
