@@ -209,6 +209,7 @@
           <button id="openProfileBtnLobby">perfil</button>
           <button id="openHelpBtnLobby">ajuda</button>
           <button id="myJailLogBtn">minhas prisões</button>
+          <button id="myPunishmentsBtn" style="position:relative;">minhas punições <span id="myPunishmentsDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="dmInboxBtn" style="position:relative;">mensagens <span id="dmUnreadDot" style="display:none; position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);"></span></button>
           <button id="changeAvatarBtn">trocar personagem</button>
           <button id="buyVipBtn" style="border-color:#f5c14233; color:#f5c142;">✨ VIP</button>
@@ -367,11 +368,34 @@
   </div>
 </div>
 
+<div id="myPunishmentsModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(420px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Minhas punições</h2><button id="myPunishmentsModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div id="myPunishmentsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="myReportsModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
+  <div style="width:min(460px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
+    <div class="panelHead"><h2>Denúncias contra mim</h2><button id="myReportsModalClose">×</button></div>
+    <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
+      <div class="hint" style="margin-bottom:12px;">Se uma denúncia foi resolvida por um moderador comum e você acha injusto, pode contestar — o caso vai direto pra dev, GM ou moderador sênior avaliarem.</div>
+      <div id="myReportsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+  </div>
+</div>
+
 <div id="myJailLogModal" style="display:none; position:fixed; inset:0; z-index:50; background:rgba(5,7,20,.75); align-items:center; justify-content:center;">
   <div style="width:min(460px,94vw); max-height:88vh; background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2)); border:2px solid var(--line); border-radius:14px; display:flex; flex-direction:column; overflow:hidden;">
     <div class="panelHead"><h2>Minhas prisões</h2><button id="myJailLogModalClose">×</button></div>
     <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
-      <div class="hint" style="margin-bottom:12px;">Registro das últimas prisões que você fez, com as mensagens da pessoa presa (fica disponível por 15 dias). Se você acha que errou em alguma, pode pedir pra equipe revisar de novo.</div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="mini-btn" id="myJailLogTabApplied">que apliquei</button>
+        <button class="mini-btn" id="myJailLogTabReceived">que recebi</button>
+      </div>
+      <div class="hint" style="margin-bottom:12px;" id="myJailLogHint">Registro das últimas prisões que você fez, com as mensagens da pessoa presa (fica disponível por 15 dias). Se você acha que errou em alguma, pode pedir pra equipe revisar de novo.</div>
       <div id="myJailLogList" style="display:flex; flex-direction:column; gap:10px;"></div>
     </div>
   </div>
@@ -2569,6 +2593,10 @@ async function openProfileModal(uid){
     }catch(e){ console.error(e); coinsLine.textContent = ''; }
     watchOwnFriendsAndRequests();
     renderStaffJailControls(uid, name);
+    const myReportsBtn = document.createElement('button');
+    myReportsBtn.className = 'mini-btn'; myReportsBtn.style.marginTop = '8px'; myReportsBtn.textContent = 'denúncias contra mim';
+    myReportsBtn.addEventListener('click', ()=>{ profileModal.style.display = 'none'; openMyReportsModal(); });
+    document.getElementById('profileFriendActionZone').appendChild(myReportsBtn);
   } else {
     friendsSection.style.display = 'none';
     coinsLine.textContent = '';
@@ -2731,9 +2759,14 @@ async function renderFriendActionButton(otherUid, otherName, otherRole){
       zone.appendChild(btn);
     }
 
-    if(myLevel >= 1 && (!otherRole || otherRole === 'player')){
+    const STAFF_JAILER_ROLES = ['dev_senior','dev','gm','mod_senior','mentor_senior'];
+    const JAILABLE_STAFF_ROLES = ['mod','mentor'];
+    const canJailNormal = myLevel >= 1 && (!otherRole || otherRole === 'player');
+    const canJailAbuse = STAFF_JAILER_ROLES.includes(myRole) && JAILABLE_STAFF_ROLES.includes(otherRole);
+    if(canJailNormal || canJailAbuse){
       const jailBtn = document.createElement('button');
-      jailBtn.className = 'mini-btn warn'; jailBtn.style.marginTop = '8px'; jailBtn.textContent = '🔒 prender';
+      jailBtn.className = 'mini-btn warn'; jailBtn.style.marginTop = '8px';
+      jailBtn.textContent = canJailAbuse && !canJailNormal ? '🔒 prender (abuso de poder)' : '🔒 prender';
       jailBtn.addEventListener('click', ()=>jailPlayer(otherUid, otherName));
       zone.appendChild(jailBtn);
     }
@@ -2805,16 +2838,107 @@ let helpCurrentTab = 'mentores';
 document.getElementById('openHelpBtnLobby').addEventListener('click', ()=>openHelpModal());
 document.getElementById('helpModalClose').addEventListener('click', ()=>{ helpModal.style.display = 'none'; });
 
-const myJailLogModal = document.getElementById('myJailLogModal');
+const myPunishmentsModal = document.getElementById('myPunishmentsModal');
+document.getElementById('myPunishmentsBtn').addEventListener('click', ()=>{ myPunishmentsModal.style.display = 'flex'; renderMyPunishments(); });
+document.getElementById('myPunishmentsModalClose').addEventListener('click', ()=>{ myPunishmentsModal.style.display = 'none'; });
+
+function updateMyPunishmentsDot(){
+  const now = Date.now();
+  const hasActive = (myJailedUntil && myJailedUntil > now) || (myJailBanUntil && myJailBanUntil > now) || (myDmBanUntil && myDmBanUntil > now);
+  document.getElementById('myPunishmentsDot').style.display = hasActive ? 'block' : 'none';
+  if(myPunishmentsModal.style.display === 'flex') renderMyPunishments();
+}
+
+function renderMyPunishments(){
+  const now = Date.now();
+  const list = document.getElementById('myPunishmentsList');
+  const items = [];
+  if(myJailedUntil && myJailedUntil > now){
+    items.push({icon:'🔒', title:'Preso', detail:'termina em ' + formatDuration(myJailedUntil - now)});
+  }
+  if(myJailBanUntil && myJailBanUntil > now){
+    items.push({icon:'🚫', title:'Proibido de prender outros jogadores', detail:'termina em ' + formatDuration(myJailBanUntil - now)});
+  }
+  if(myDmBanUntil && myDmBanUntil > now){
+    items.push({icon:'✉️🚫', title:'Proibido de mandar mensagem privada', detail:'termina em ' + formatDuration(myDmBanUntil - now)});
+  }
+  if(!items.length){
+    list.innerHTML = '<div class="empty">nenhuma punição ativa no momento. 🎉</div>';
+    return;
+  }
+  list.innerHTML = '';
+  items.forEach(it=>{
+    const card = document.createElement('div');
+    card.style.cssText = 'background:rgba(255,255,255,.03); border:1px solid var(--danger); border-radius:10px; padding:10px 12px;';
+    card.innerHTML = `<div>${it.icon} <b>${it.title}</b></div><div class="hint" style="margin-top:2px;">${it.detail}</div>`;
+    list.appendChild(card);
+  });
+}
+document.getElementById('myReportsModalClose').addEventListener('click', ()=>{ myReportsModal.style.display = 'none'; });
+
+async function openMyReportsModal(){
+  myReportsModal.style.display = 'flex';
+  const listEl = document.getElementById('myReportsList');
+  listEl.innerHTML = '<div class="empty">carregando…</div>';
+  try{
+    const snap = await db.ref('reports').orderByChild('reportedUid').equalTo(myId).once('value');
+    const val = snap.val() || {};
+    const items = Object.keys(val).map(id=>({id, ...val[id]})).sort((a,b)=>b.ts-a.ts);
+    listEl.innerHTML = '';
+    if(!items.length){
+      listEl.innerHTML = '<div class="empty">nenhuma denúncia contra você.</div>';
+      return;
+    }
+    items.forEach(r=>{
+      const card = document.createElement('div');
+      card.style.cssText = 'background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:10px; padding:10px 12px;';
+      const statusLabel = r.status === 'resolved' ? '<span style="color:var(--ok);">resolvida</span>' : '<span class="hint">pendente</span>';
+      const escalatedBadge = r.escalated ? ' <span style="color:#f5c142;">🔺 contestada</span>' : '';
+      card.innerHTML = `<div><b>${new Date(r.ts).toLocaleDateString('pt-BR')}</b> — ${statusLabel}${escalatedBadge}
+        <div class="hint" style="font-size:12px; margin-top:4px;">motivo: ${escapeHtml(r.reason||'')}</div></div>`;
+      if(r.status === 'resolved' && r.resolvedByRole === 'mod' && !r.escalated){
+        const contestBtn = document.createElement('button');
+        contestBtn.className = 'mini-btn warn'; contestBtn.style.marginTop = '8px'; contestBtn.textContent = 'contestar essa denúncia';
+        contestBtn.addEventListener('click', async ()=>{
+          if(!confirm('Contestar essa denúncia? Vai direto pra dev/GM/moderador sênior avaliarem.')) return;
+          try{
+            await db.ref('reports/'+r.id).update({status:'pending', escalated:true, contestedBySelf:true, contestedAt: Date.now()});
+            contestBtn.textContent = '✓ contestada'; contestBtn.disabled = true;
+          }catch(e){ console.error(e); alert('erro ao contestar (veja o Console/F12).'); }
+        });
+        card.appendChild(contestBtn);
+      }
+      listEl.appendChild(card);
+    });
+  }catch(err){
+    console.error(err);
+    listEl.innerHTML = '<div class="empty">erro ao carregar (veja o Console/F12).</div>';
+  }
+}
 document.getElementById('myJailLogBtn').addEventListener('click', ()=>openMyJailLogModal());
 document.getElementById('myJailLogModalClose').addEventListener('click', ()=>{ myJailLogModal.style.display = 'none'; });
 
+let myJailLogTab = 'applied';
+document.getElementById('myJailLogTabApplied').addEventListener('click', ()=>{ myJailLogTab = 'applied'; renderMyJailLog(); });
+document.getElementById('myJailLogTabReceived').addEventListener('click', ()=>{ myJailLogTab = 'received'; renderMyJailLog(); });
+
 async function openMyJailLogModal(){
   myJailLogModal.style.display = 'flex';
+  myJailLogTab = 'applied';
+  await renderMyJailLog();
+}
+
+async function renderMyJailLog(){
+  document.getElementById('myJailLogTabApplied').className = myJailLogTab === 'applied' ? 'mini-btn ok' : 'mini-btn';
+  document.getElementById('myJailLogTabReceived').className = myJailLogTab === 'received' ? 'mini-btn ok' : 'mini-btn';
+  document.getElementById('myJailLogHint').textContent = myJailLogTab === 'applied'
+    ? 'Registro das últimas prisões que você fez, com as mensagens da pessoa presa (fica disponível por 15 dias). Se você acha que errou em alguma, pode pedir pra equipe revisar de novo.'
+    : 'Registro das prisões que você recebeu nos últimos 15 dias. Se um moderador comum analisou e você acha injusto, pode contestar — aí só dev, GM ou moderador sênior decidem.';
   const listEl = document.getElementById('myJailLogList');
   listEl.innerHTML = '<div class="empty">carregando…</div>';
   try{
-    const snap = await db.ref('jailActionsByJailer/'+myId).once('value');
+    const path = myJailLogTab === 'applied' ? 'jailActionsByJailer/'+myId : 'jailHistory/'+myId;
+    const snap = await db.ref(path).once('value');
     const val = snap.val() || {};
     const now = Date.now();
     const FIFTEEN_DAYS = 15*24*3600000;
@@ -2824,7 +2948,7 @@ async function openMyJailLogModal(){
       .sort((a,b)=> b.at - a.at);
     listEl.innerHTML = '';
     if(!entries.length){
-      listEl.innerHTML = '<div class="empty">nenhuma prisão sua nos últimos 15 dias.</div>';
+      listEl.innerHTML = `<div class="empty">nenhuma prisão ${myJailLogTab === 'applied' ? 'sua' : 'recebida'} nos últimos 15 dias.</div>`;
       return;
     }
     entries.forEach(e=>{
@@ -2833,9 +2957,11 @@ async function openMyJailLogModal(){
       const statusLabel = e.reviewStatus === 'fair' ? '<span style="color:var(--ok);">avaliada como justa</span>'
         : e.reviewStatus === 'unfair' ? '<span style="color:var(--danger);">avaliada como injusta</span>'
         : '<span class="hint">aguardando revisão</span>';
+      const escalatedBadge = e.escalated ? ' <span style="color:#f5c142;">🔺 escalada pros superiores</span>' : '';
       const daysLeft = Math.max(0, Math.ceil((FIFTEEN_DAYS - (now - e.at))/86400000));
       const head = document.createElement('div');
-      head.innerHTML = `<b>${escapeHtml(e.targetName||'???')}</b> — ${new Date(e.at).toLocaleDateString('pt-BR')} — ${statusLabel}
+      const otherPartyLabel = myJailLogTab === 'applied' ? escapeHtml(e.targetName||'???') : ('por ' + escapeHtml(e.jailedByName||'???'));
+      head.innerHTML = `<b>${otherPartyLabel}</b> — ${new Date(e.at).toLocaleDateString('pt-BR')} — ${statusLabel}${escalatedBadge}
         <div class="hint" style="font-size:11px;">some do registro em ${daysLeft} dia(s)</div>`;
       card.appendChild(head);
 
@@ -2845,7 +2971,7 @@ async function openMyJailLogModal(){
       msgBox.innerHTML = msgs.length ? msgs.map(m=>`<div>${escapeHtml(m.text||'')}</div>`).join('') : '<span class="hint">sem mensagens recentes dela(e) nos 10 min antes da prisão.</span>';
       card.appendChild(msgBox);
 
-      if(e.reviewStatus !== 'pending'){
+      if(myJailLogTab === 'applied' && e.reviewStatus !== 'pending'){
         const askBtn = document.createElement('button');
         askBtn.className = 'mini-btn'; askBtn.style.marginTop = '8px'; askBtn.textContent = 'pedir revisão de novo';
         askBtn.addEventListener('click', async ()=>{
@@ -2868,6 +2994,31 @@ async function openMyJailLogModal(){
         });
         card.appendChild(askBtn);
       }
+
+      if(myJailLogTab === 'received' && e.reviewStatus !== 'unfair' && !e.escalated){
+        const contestBtn = document.createElement('button');
+        contestBtn.className = 'mini-btn warn'; contestBtn.style.marginTop = '8px'; contestBtn.textContent = 'contestar essa prisão';
+        contestBtn.addEventListener('click', async ()=>{
+          if(!confirm('Contestar essa prisão? Isso manda o caso direto pra dev/GM/moderador sênior avaliarem.')) return;
+          contestBtn.textContent = 'enviando…';
+          try{
+            const resp = await fetch(EDGE_FUNCTIONS_BASE+'/contest-jail-review', {
+              method:'POST', headers: edgeFunctionHeaders(),
+              body: JSON.stringify({targetUid: myId, historyEntryId: e.id})
+            });
+            const data = await resp.json();
+            if(!resp.ok) throw new Error(data.error || 'falha ao contestar');
+            contestBtn.textContent = '✓ contestado';
+            contestBtn.disabled = true;
+          }catch(err){
+            console.error(err);
+            contestBtn.textContent = 'contestar essa prisão';
+            alert(err.message || 'erro ao contestar');
+          }
+        });
+        card.appendChild(contestBtn);
+      }
+
       listEl.appendChild(card);
     });
   }catch(err){
@@ -3024,6 +3175,10 @@ async function sendDmMessage(){
   const input = document.getElementById('dmThreadInput');
   const text = input.value.trim().slice(0,500);
   if(!text || !dmCurrentOtherUid) return;
+  if(myDmBanUntil && myDmBanUntil > Date.now()){
+    alert('Você está proibido de mandar mensagem privada por mais ' + formatDuration(myDmBanUntil - Date.now()) + ' (por causa de uma denúncia).');
+    return;
+  }
   input.value = '';
   const otherUid = dmCurrentOtherUid;
   try{
@@ -3059,7 +3214,7 @@ async function reportPrivateMessage(otherUid, otherName, messageText, messageTs)
 }
 document.getElementById('dmThreadSendBtn').addEventListener('click', sendDmMessage);
 document.getElementById('dmThreadInput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendDmMessage(); });
-let myJailedUntil = null, myJailedIn = null;
+let myJailedUntil = null, myJailedIn = null, myJailBanUntil = null, myDmBanUntil = null;
 let jailStatusRef = null;
 let jailCountdownInterval = null;
 let jailPanelMinimized = (localStorage.getItem('jailPanelMinimized') === '1');
@@ -3080,7 +3235,10 @@ function startJailStatusWatcher(){
     const v = snap.val() || {};
     myJailedUntil = v.jailedUntil || null;
     myJailedIn = v.jailedIn || null;
+    myJailBanUntil = v.jailBanUntil || null;
+    myDmBanUntil = v.dmBanUntil || null;
     updateJailOverlay();
+    updateMyPunishmentsDot();
   });
 }
 
@@ -3231,7 +3389,8 @@ async function renderJailsTab(){
       const row = document.createElement('div'); row.className='prow';
       row.style.display='flex'; row.style.flexDirection='column'; row.style.gap='6px'; row.style.padding='10px 0'; row.style.borderBottom='1px solid var(--line)';
       const info = document.createElement('div');
-      info.innerHTML = `<b>${escapeHtml(p.targetName||'???')}</b> — preso por <b>${escapeHtml(p.jailedByName||'???')}</b>`;
+      const escalatedBadge = p.escalated ? ' <span style="color:#f5c142;">🔺 ESCALADA (contestada)</span>' : '';
+      info.innerHTML = `<b>${escapeHtml(p.targetName||'???')}</b> — preso por <b>${escapeHtml(p.jailedByName||'???')}</b>${escalatedBadge}`;
       row.appendChild(info);
 
       if(p.historyEntryId){
@@ -3251,11 +3410,17 @@ async function renderJailsTab(){
       }
 
       const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.gap='8px'; btnRow.style.flexWrap='wrap';
-      const fairBtn = document.createElement('button'); fairBtn.className='mini-btn ok'; fairBtn.textContent='justa';
-      fairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'fair'));
-      const unfairBtn = document.createElement('button'); unfairBtn.className='mini-btn warn'; unfairBtn.textContent='injusta';
-      unfairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'unfair'));
-      btnRow.appendChild(fairBtn); btnRow.appendChild(unfairBtn);
+      if(p.escalated && !canOverride){
+        const locked = document.createElement('div'); locked.className='hint';
+        locked.textContent = 'esse caso foi contestado — só dev, GM ou moderador sênior podem decidir.';
+        btnRow.appendChild(locked);
+      } else {
+        const fairBtn = document.createElement('button'); fairBtn.className='mini-btn ok'; fairBtn.textContent='justa';
+        fairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'fair'));
+        const unfairBtn = document.createElement('button'); unfairBtn.className='mini-btn warn'; unfairBtn.textContent='injusta';
+        unfairBtn.addEventListener('click', ()=>reviewJail(targetUid, 'unfair'));
+        btnRow.appendChild(fairBtn); btnRow.appendChild(unfairBtn);
+      }
 
       if(canOverride){
         const releaseBtn = document.createElement('button'); releaseBtn.className='mini-btn'; releaseBtn.textContent='liberar agora';
@@ -3471,16 +3636,33 @@ async function renderReportsTab(){
     const row = document.createElement('div'); row.className='prow';
     const when = new Date(r.ts).toLocaleString('pt-BR');
     const contextLine = r.type === 'dm' ? 'mensagem privada' : ('sala: ' + escapeHtml(r.roomName||'?'));
-    row.innerHTML = `<div class="info"><b>${escapeHtml(r.reportedName)}</b> denunciado por ${escapeHtml(r.reporterName)}
+    const escalatedBadge = r.escalated ? ' <span style="color:#f5c142;">🔺 ESCALADA (contestada)</span>' : '';
+    row.innerHTML = `<div class="info"><b>${escapeHtml(r.reportedName)}</b> denunciado por ${escapeHtml(r.reporterName)}${escalatedBadge}
       <div class="sub">${escapeHtml(r.reason)} — ${contextLine} — ${when} — status: ${r.status}</div>
       ${r.type === 'dm' ? `<div class="hint" style="margin-top:4px; background:rgba(0,0,0,.25); padding:6px 8px; border-radius:6px;">"${escapeHtml(r.messageText||'')}"</div>` : ''}
       </div>`;
-    if(r.status === 'pending'){
+    const canOverrideReports = ['dev_senior','dev','gm','mod_senior'].includes(myRole);
+    if(r.status === 'pending' && (!r.escalated || canOverrideReports)){
       const btn = document.createElement('button'); btn.className='mini-btn ok'; btn.textContent='marcar resolvida';
       btn.addEventListener('click', async ()=>{
-        try{ await db.ref('reports/'+r.id+'/status').set('resolved'); renderReportsTab(); }catch(e){ console.error(e); }
+        const applyDmBan = r.type === 'dm' && confirm('Aplicar punição de 15 dias sem poder mandar mensagem privada pra ' + r.reportedName + '?\n\n(Cancelar = marca resolvida sem punir, ex: denúncia sem fundamento)');
+        try{
+          const updates = {
+            status:'resolved', resolvedBy: myId, resolvedByName: myName, resolvedByRole: myRole, resolvedAt: Date.now(), escalated: false,
+          };
+          if(applyDmBan) updates.appliedDmBan = true;
+          await db.ref('reports/'+r.id).update(updates);
+          if(applyDmBan){
+            await db.ref('users/'+r.reportedUid+'/dmBanUntil').set(Date.now() + 15*24*3600000);
+          }
+          renderReportsTab();
+        }catch(e){ console.error(e); }
       });
       row.appendChild(btn);
+    } else if(r.status === 'pending' && r.escalated && !canOverrideReports){
+      const locked = document.createElement('div'); locked.className='hint';
+      locked.textContent = 'contestada — só dev, GM ou moderador sênior podem decidir.';
+      row.appendChild(locked);
     }
     panelBodyEl.appendChild(row);
   });
