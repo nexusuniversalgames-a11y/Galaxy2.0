@@ -3033,6 +3033,14 @@ async function openGangsModal(){
     ]);
     myGangId = myGangSnap.val() || null;
     gangsCache = gangsSnap.val() || {};
+    // se fui expulso enquanto estava offline, o ponteiro pode ter ficado "preso" apontando
+    // pra uma gangue da qual não sou mais membro — corrige sozinho aqui (só eu posso
+    // escrever no meu próprio gangId, então isso não dá pra fazer na hora da expulsão)
+    if(myGangId && (!gangsCache[myGangId] || !gangsCache[myGangId].members || !gangsCache[myGangId].members[myId])){
+      await db.ref('users/'+myId+'/gangId').remove().catch(()=>{});
+      await db.ref('publicProfiles/'+myId+'/gangId').remove().catch(()=>{});
+      myGangId = null;
+    }
     renderGangsMyGangBox();
     renderGangsList();
   }catch(e){
@@ -3049,13 +3057,89 @@ function renderGangsMyGangBox(){
   }
   const g = gangsCache[myGangId];
   const officialBadge = g.official ? ' <span style="color:#4ade80;">✔️ oficial</span>' : '';
+  const myRoleInGang = (g.members && g.members[myId] && g.members[myId].role) || 'member';
+  const roleLabel = myRoleInGang === 'leader' ? 'líder' : myRoleInGang === 'assistant' ? 'assistente' : 'membro';
   box.innerHTML = `<div style="background:rgba(255,255,255,.04); border:1px solid var(--nebula-soft); border-radius:10px; padding:10px 12px;">
     <div>sua gangue: <b>${escapeHtml(g.name)}</b>${officialBadge}</div>
+    <div class="hint" style="font-size:12px;">seu cargo na gangue: ${roleLabel}</div>
   </div>`;
+  const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.gap='8px'; btnRow.style.flexWrap='wrap'; btnRow.style.marginTop='8px';
+  if(myRoleInGang === 'leader' || myRoleInGang === 'assistant'){
+    const manageBtn = document.createElement('button');
+    manageBtn.className = 'mini-btn'; manageBtn.textContent = 'gerenciar membros';
+    manageBtn.addEventListener('click', ()=>renderGangMembersManage(myGangId));
+    btnRow.appendChild(manageBtn);
+  }
   const leaveBtn = document.createElement('button');
-  leaveBtn.className = 'mini-btn warn'; leaveBtn.style.marginTop = '8px'; leaveBtn.textContent = 'sair da gangue';
+  leaveBtn.className = 'mini-btn warn'; leaveBtn.textContent = 'sair da gangue';
   leaveBtn.addEventListener('click', ()=>leaveGang(myGangId));
-  box.appendChild(leaveBtn);
+  btnRow.appendChild(leaveBtn);
+  box.appendChild(btnRow);
+}
+
+function renderGangMembersManage(gangId){
+  const box = document.getElementById('gangsMyGangBox');
+  const g = gangsCache[gangId];
+  const myRoleInGang = (g.members && g.members[myId] && g.members[myId].role) || 'member';
+  const members = Object.entries(g.members || {}).sort((a,b)=>{
+    const order = {leader:0, assistant:1, member:2};
+    return (order[a[1].role]??2) - (order[b[1].role]??2) || a[1].name.localeCompare(b[1].name);
+  });
+  const list = document.createElement('div');
+  list.style.cssText = 'margin-top:10px; display:flex; flex-direction:column; gap:6px;';
+  members.forEach(([uid, m])=>{
+    const roleLabel = m.role === 'leader' ? '👑 líder' : m.role === 'assistant' ? '🛡️ assistente' : 'membro';
+    const row = document.createElement('div');
+    row.style.cssText = 'background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:8px; padding:6px 10px; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;';
+    row.innerHTML = `<span>${escapeHtml(m.name)} <span class="hint" style="font-size:11px;">— ${roleLabel}</span></span>`;
+    const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='6px';
+    if(uid !== myId){
+      // líder pode mexer em qualquer um (menos si mesmo); assistente só mexe em membro comum
+      const canAct = myRoleInGang === 'leader' || (myRoleInGang === 'assistant' && m.role === 'member');
+      if(canAct){
+        if(m.role === 'member'){
+          const promoteBtn = document.createElement('button'); promoteBtn.className='mini-btn ok'; promoteBtn.textContent='promover a assistente';
+          promoteBtn.addEventListener('click', ()=>setGangMemberRole(gangId, uid, 'assistant'));
+          actions.appendChild(promoteBtn);
+        } else if(m.role === 'assistant' && myRoleInGang === 'leader'){
+          const demoteBtn = document.createElement('button'); demoteBtn.className='mini-btn'; demoteBtn.textContent='rebaixar a membro';
+          demoteBtn.addEventListener('click', ()=>setGangMemberRole(gangId, uid, 'member'));
+          actions.appendChild(demoteBtn);
+        }
+        if(m.role !== 'leader'){
+          const kickBtn = document.createElement('button'); kickBtn.className='mini-btn warn'; kickBtn.textContent='expulsar';
+          kickBtn.addEventListener('click', ()=>kickGangMember(gangId, uid, m.name));
+          actions.appendChild(kickBtn);
+        }
+      }
+    }
+    row.appendChild(actions);
+    list.appendChild(row);
+  });
+  const backBtn = document.createElement('button');
+  backBtn.className = 'mini-btn'; backBtn.style.marginTop = '8px'; backBtn.textContent = '← voltar';
+  backBtn.addEventListener('click', ()=>renderGangsMyGangBox());
+  box.appendChild(list);
+  box.appendChild(backBtn);
+}
+
+async function setGangMemberRole(gangId, uid, role){
+  try{
+    await db.ref('gangs/'+gangId+'/members/'+uid+'/role').set(role);
+    const snap = await db.ref('gangs/'+gangId).once('value');
+    gangsCache[gangId] = snap.val();
+    renderGangMembersManage(gangId);
+  }catch(e){ console.error('erro ao mudar cargo na gangue:', e); alert('erro (veja o Console/F12).'); }
+}
+
+async function kickGangMember(gangId, uid, name){
+  if(!confirm('Expulsar ' + name + ' da gangue?')) return;
+  try{
+    await db.ref('gangs/'+gangId+'/members/'+uid).remove();
+    const snap = await db.ref('gangs/'+gangId).once('value');
+    gangsCache[gangId] = snap.val();
+    renderGangMembersManage(gangId);
+  }catch(e){ console.error('erro ao expulsar da gangue:', e); alert('erro (veja o Console/F12).'); }
 }
 
 function renderGangsList(){
@@ -3094,7 +3178,7 @@ document.getElementById('createGangBtn').addEventListener('click', async ()=>{
     const ref = db.ref('gangs').push();
     await ref.set({
       name, ownerUid: myId, ownerName: myName, createdAt: Date.now(), official: false,
-      members: { [myId]: { name: myName, joinedAt: Date.now() } },
+      members: { [myId]: { name: myName, joinedAt: Date.now(), role: 'leader' } },
     });
     await db.ref('users/'+myId+'/gangId').set(ref.key);
     await db.ref('publicProfiles/'+myId+'/gangId').set(ref.key).catch(e=>console.error('erro ao espelhar gangId:', e));
@@ -3105,8 +3189,13 @@ document.getElementById('createGangBtn').addEventListener('click', async ()=>{
 
 async function joinGang(gangId, gangName){
   if(myGangId){ alert('Você já está na gangue "' + (gangsCache[myGangId]||{}).name + '" — saia dela primeiro.'); return; }
+  const g = gangsCache[gangId];
+  if(g && g.official && myRole === 'player'){
+    alert('Essa é uma gangue oficial — só quem tem cargo na equipe (mentor pra cima) pode entrar.');
+    return;
+  }
   try{
-    await db.ref('gangs/'+gangId+'/members/'+myId).set({ name: myName, joinedAt: Date.now() });
+    await db.ref('gangs/'+gangId+'/members/'+myId).set({ name: myName, joinedAt: Date.now(), role: 'member' });
     await db.ref('users/'+myId+'/gangId').set(gangId);
     await db.ref('publicProfiles/'+myId+'/gangId').set(gangId).catch(e=>console.error('erro ao espelhar gangId:', e));
     await openGangsModal();
