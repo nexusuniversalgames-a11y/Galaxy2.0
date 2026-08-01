@@ -384,10 +384,11 @@
     <div class="panelHead"><h2>Gangues</h2><button id="gangsModalClose">×</button></div>
     <div style="padding:18px 20px 22px; overflow-y:auto; max-height:calc(88vh - 56px);">
       <div id="gangsMyGangBox" style="margin-bottom:14px;"></div>
-      <div class="create-row" style="margin-bottom:14px;">
+      <div class="create-row" style="margin-bottom:6px;">
         <input type="text" id="gangNameInput" maxlength="24" placeholder="nome da nova gangue…">
         <button class="btn" id="createGangBtn">criar</button>
       </div>
+      <div class="hint" style="margin-bottom:10px;">Custa 🪙 100 moedas — ou de graça se você tem VIP ativo (Dev/GM não pagam nada).</div>
       <div class="hint" style="margin-bottom:10px;">Gangues com <span style="color:#4ade80;">✔️</span> são oficiais da equipe. As outras são criadas livremente pelos jogadores.</div>
       <div id="gangsList" style="display:flex; flex-direction:column; gap:8px;"></div>
     </div>
@@ -3172,9 +3173,36 @@ function renderGangsList(){
 document.getElementById('createGangBtn').addEventListener('click', async ()=>{
   const input = document.getElementById('gangNameInput');
   const name = input.value.trim().slice(0,24);
+  const msgEl = document.getElementById('gangCreateMsg') || (()=>{
+    const d = document.createElement('div'); d.id='gangCreateMsg'; d.className='errmsg';
+    input.insertAdjacentElement('afterend', d); return d;
+  })();
+  msgEl.textContent = '';
   if(!name) return;
   if(myGangId){ alert('Você já está numa gangue — saia dela primeiro pra criar outra.'); return; }
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'verificando nome…';
   try{
+    const existingSnap = await db.ref('gangs').once('value');
+    const existing = existingSnap.val() || {};
+    const nameTaken = Object.values(existing).some(g => (g.name||'').trim().toLowerCase() === name.toLowerCase());
+    if(nameTaken){
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'já existe uma gangue com esse nome — escolhe outro.';
+      return;
+    }
+  }catch(e){ console.error('erro ao checar nome de gangue:', e); msgEl.style.color='var(--danger)'; msgEl.textContent='erro ao checar nome (veja o Console/F12).'; return; }
+  msgEl.style.color = 'var(--text-dim)'; msgEl.textContent = 'verificando custo…';
+  try{
+    const chargeResp = await fetch(EDGE_FUNCTIONS_BASE+'/charge-gang-creation', {
+      method:'POST', headers: edgeFunctionHeaders(),
+      body: JSON.stringify({uid: myId, role: myRole})
+    });
+    const chargeData = await chargeResp.json();
+    if(!chargeResp.ok){
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = chargeData.error || 'não foi possível criar a gangue.';
+      return;
+    }
     const ref = db.ref('gangs').push();
     await ref.set({
       name, ownerUid: myId, ownerName: myName, createdAt: Date.now(), official: false,
@@ -3183,8 +3211,10 @@ document.getElementById('createGangBtn').addEventListener('click', async ()=>{
     await db.ref('users/'+myId+'/gangId').set(ref.key);
     await db.ref('publicProfiles/'+myId+'/gangId').set(ref.key).catch(e=>console.error('erro ao espelhar gangId:', e));
     input.value = '';
+    msgEl.textContent = chargeData.cost > 0 ? `gangue criada! (-${chargeData.cost} moedas)` : 'gangue criada de graça!';
+    msgEl.style.color = 'var(--ok)';
     await openGangsModal();
-  }catch(e){ console.error('erro ao criar gangue:', e); alert('erro ao criar gangue (veja o Console/F12).'); }
+  }catch(e){ console.error('erro ao criar gangue:', e); msgEl.style.color='var(--danger)'; msgEl.textContent='erro ao criar gangue (veja o Console/F12).'; }
 });
 
 async function joinGang(gangId, gangName){
