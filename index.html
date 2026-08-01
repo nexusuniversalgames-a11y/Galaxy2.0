@@ -717,6 +717,7 @@ async function checkAndApplyLevelUp(){
 
     if(Object.keys(updates).length){
       await db.ref('users/'+myId).update(updates);
+      await db.ref('publicProfiles/'+myId).update(updates).catch(e=>console.error('erro ao espelhar perfil público:', e));
     }
     myLevel = newLevel;
     myVipActiveUntil = profile.vipActiveUntil || null;
@@ -1437,6 +1438,7 @@ document.getElementById('saveAvatarBtn').addEventListener('click', async ()=>{
     const updates = {avatarIndex: avatarIndex2, vrmId: selectedVrmId2 || null};
     if(canTestAura(myRole)) updates.level = levelIndex2;
     await db.ref('users/'+myId).update(updates);
+    await db.ref('publicProfiles/'+myId).update(updates).catch(e=>console.error('erro ao espelhar perfil público:', e));
     myAvatarIndex = avatarIndex2;
     myVrmId = selectedVrmId2 || null;
     if(canTestAura(myRole)) myLevel = levelIndex2;
@@ -1519,6 +1521,7 @@ document.getElementById('registerBtn').addEventListener('click', async ()=>{
       const role = wasFirst ? 'dev_senior' : 'player';
       const profile = {name, email: pendingGoogleUser.email||'', avatarIndex, role, level:0, isNew: !wasFirst, createdAt: Date.now()};
       await db.ref('users/'+uid).set(profile);
+      db.ref('publicProfiles/'+uid).set({name, avatarIndex, role, level:0, vrmId:null, activeRoom:null, gangId:null}).catch(e=>console.error('erro ao criar perfil público:', e));
       myId = uid; myName = name; myAvatarIndex = avatarIndex; myRole = role; myLevel = 0; myIsNew = profile.isNew;
       completingGoogleProfile = false; pendingGoogleUser = null;
       previewActive = false;
@@ -1547,6 +1550,7 @@ document.getElementById('registerBtn').addEventListener('click', async ()=>{
     const role = wasFirst ? 'dev_senior' : 'player';
     const profile = {name, email, avatarIndex, role, level:0, isNew: !wasFirst, createdAt: Date.now()};
     await db.ref('users/'+uid).set(profile);
+    db.ref('publicProfiles/'+uid).set({name, avatarIndex, role, level:0, vrmId:null, activeRoom:null, gangId:null}).catch(e=>console.error('erro ao criar perfil público:', e));
   }catch(e){
     console.error(e);
     authError.textContent = friendlyAuthError(e.code);
@@ -2545,6 +2549,8 @@ async function enterRoom(id, name){
     presenceRef.onDisconnect().remove();
     await db.ref('users/'+myId+'/activeRoom').set(id);
     db.ref('users/'+myId+'/activeRoom').onDisconnect().remove();
+    db.ref('publicProfiles/'+myId).update({activeRoom: id, name: myName, avatarIndex: myAvatarIndex, level: myLevel, vrmId: myVrmId||null, role: myRole||'player'}).catch(e=>console.error('erro ao espelhar perfil público:', e));
+    db.ref('publicProfiles/'+myId+'/activeRoom').onDisconnect().remove();
   }catch(e){ console.error('presence set error', e); }
   heartbeatTimer = setInterval(pushPresence, 150);
   playTimeTimer = setInterval(playTimeTick, 60000);
@@ -2595,6 +2601,7 @@ async function leaveRoom(){
     if(metaRef) metaRef.off();
     if(presenceRef){ await presenceRef.onDisconnect().cancel(); await presenceRef.remove(); }
     await db.ref('users/'+myId+'/activeRoom').set(null);
+    db.ref('publicProfiles/'+myId+'/activeRoom').set(null).catch(()=>{});
   }catch(e){ console.error('leave room error', e); }
   presenceRef=null; playersRef=null; messagesRef=null; metaRef=null;
   currentRoom = null;
@@ -2659,7 +2666,7 @@ async function openProfileModal(uid){
     const r = remote[uid] || null;
     let fresh = null;
     try{
-      const freshSnap = await db.ref('users/'+uid).once('value');
+      const freshSnap = await db.ref('publicProfiles/'+uid).once('value');
       fresh = freshSnap.val();
     }catch(e){ console.error('erro ao buscar dados do perfil:', e); }
     if(!r && !fresh){ document.getElementById('profileMsg').textContent = 'não encontrei esse jogador.'; return; }
@@ -2704,7 +2711,7 @@ async function openProfileModal(uid){
   const coinsLine = document.getElementById('profileCoinsLine');
   const friendsSection = document.getElementById('profileFriendsSection');
 
-  db.ref('users/'+uid+'/gangId').once('value').then(gangIdSnap=>{
+  db.ref('publicProfiles/'+uid+'/gangId').once('value').then(gangIdSnap=>{
     const gid = gangIdSnap.val();
     if(!gid) return;
     return db.ref('gangs/'+gid).once('value').then(gangSnap=>{
@@ -2822,7 +2829,12 @@ function renderStaffJailControls(uid, name){
     const msgEl = document.getElementById('profileMsg');
     dmBanBtn.textContent = 'removendo…';
     try{
-      await db.ref('users/'+uid+'/dmBanUntil').set(null);
+      const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-set-dm-ban', {
+        method:'POST', headers: edgeFunctionHeaders(),
+        body: JSON.stringify({targetUid: uid, actorUid: myId, banUntil: null})
+      });
+      const data = await resp.json();
+      if(!resp.ok) throw new Error(data.error || 'falha ao remover');
       dmBanBtn.textContent = '✓ removida';
       msgEl.style.color = 'var(--ok)'; msgEl.textContent = 'proibição de mensagem privada removida (se existia alguma).';
       setTimeout(()=>{ dmBanBtn.textContent = 'remover proibição de mensagem privada (se tiver)'; }, 1800);
@@ -3085,6 +3097,7 @@ document.getElementById('createGangBtn').addEventListener('click', async ()=>{
       members: { [myId]: { name: myName, joinedAt: Date.now() } },
     });
     await db.ref('users/'+myId+'/gangId').set(ref.key);
+    await db.ref('publicProfiles/'+myId+'/gangId').set(ref.key).catch(e=>console.error('erro ao espelhar gangId:', e));
     input.value = '';
     await openGangsModal();
   }catch(e){ console.error('erro ao criar gangue:', e); alert('erro ao criar gangue (veja o Console/F12).'); }
@@ -3095,6 +3108,7 @@ async function joinGang(gangId, gangName){
   try{
     await db.ref('gangs/'+gangId+'/members/'+myId).set({ name: myName, joinedAt: Date.now() });
     await db.ref('users/'+myId+'/gangId').set(gangId);
+    await db.ref('publicProfiles/'+myId+'/gangId').set(gangId).catch(e=>console.error('erro ao espelhar gangId:', e));
     await openGangsModal();
   }catch(e){ console.error('erro ao entrar na gangue:', e); alert('erro ao entrar (veja o Console/F12).'); }
 }
@@ -3104,6 +3118,7 @@ async function leaveGang(gangId){
   try{
     await db.ref('gangs/'+gangId+'/members/'+myId).remove();
     await db.ref('users/'+myId+'/gangId').remove();
+    await db.ref('publicProfiles/'+myId+'/gangId').remove().catch(e=>console.error('erro ao espelhar gangId:', e));
     await openGangsModal();
   }catch(e){ console.error('erro ao sair da gangue:', e); alert('erro ao sair (veja o Console/F12).'); }
 }
@@ -3117,7 +3132,7 @@ async function openFindPlayerModal(){
   document.getElementById('findPlayerResults').innerHTML = '<div class="hint">digite pelo menos 2 letras do nome…</div>';
   if(!allUsersCache){
     try{
-      const snap = await db.ref('users').once('value');
+      const snap = await db.ref('publicProfiles').once('value');
       allUsersCache = snap.val() || {};
     }catch(e){ console.error('erro ao carregar lista de jogadores:', e); allUsersCache = {}; }
   }
@@ -3980,7 +3995,11 @@ async function renderRolesTab(){
       LEVELS.forEach(lv=>{ const o=document.createElement('option'); o.value=lv.level; o.textContent = `Nv ${lv.level} — ${lv.name}`; if((u.level||0)===lv.level) o.selected=true; levelSel.appendChild(o); });
       levelBtn = document.createElement('button'); levelBtn.className='mini-btn ok'; levelBtn.textContent='salvar nível';
       levelBtn.addEventListener('click', async ()=>{
-        try{ await db.ref('users/'+uid+'/level').set(parseInt(levelSel.value,10)); levelBtn.textContent='✓'; setTimeout(()=>renderRolesTab(),400); }
+        try{
+          const lv = parseInt(levelSel.value,10);
+          await db.ref().update({['users/'+uid+'/level']: lv, ['publicProfiles/'+uid+'/level']: lv});
+          levelBtn.textContent='✓'; setTimeout(()=>renderRolesTab(),400);
+        }
         catch(e){ console.error(e); levelBtn.textContent='erro'; }
       });
     }
@@ -3993,6 +4012,7 @@ async function renderRolesTab(){
         try{
           const updates = {};
           updates['users/'+uid+'/role'] = sel.value;
+          updates['publicProfiles/'+uid+'/role'] = sel.value;
           updates['staffDirectory/'+uid] = (sel.value === 'player') ? null : {name: u.name||'???', role: sel.value};
           await db.ref().update(updates);
           btn.textContent='✓'; setTimeout(()=>renderRolesTab(),400);
@@ -4047,10 +4067,15 @@ async function renderReportsTab(){
           if(applyDmBan) updates.appliedDmBan = true;
           await db.ref('reports/'+r.id).update(updates);
           if(applyDmBan){
-            await db.ref('users/'+r.reportedUid+'/dmBanUntil').set(Date.now() + 15*24*3600000);
+            const resp = await fetch(EDGE_FUNCTIONS_BASE+'/admin-set-dm-ban', {
+              method:'POST', headers: edgeFunctionHeaders(),
+              body: JSON.stringify({targetUid: r.reportedUid, actorUid: myId, banUntil: Date.now() + 15*24*3600000})
+            });
+            const data = await resp.json();
+            if(!resp.ok) throw new Error(data.error || 'falha ao aplicar punição de DM');
           }
           renderReportsTab();
-        }catch(e){ console.error(e); }
+        }catch(e){ console.error(e); alert(e.message || 'erro ao resolver denúncia'); }
       });
       row.appendChild(btn);
     } else if(r.status === 'pending' && r.escalated && !canOverrideReports){
